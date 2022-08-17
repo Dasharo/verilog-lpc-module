@@ -76,17 +76,15 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, current_state_o
 
     assign lpc_addr_o = lpc_addr_o_reg;
 
-    always @ (posedge clk_i or negedge nrst_i) begin    //save cycle type
+    always @ (posedge clk_i) begin    //save cycle type
         if (~nrst_i) cycle_type <= 2'b00;
-        else if (clk_i) begin
-            cycle_type <= 2'b00;
-            if (io_rden_sm_o) begin
-                cycle_type <= 2'b11; //read
-            end;
-            if (io_wren_sm_o) begin
-               cycle_type <= 2'b01; //write
-            end;
-        end;
+		cycle_type <= 2'b00;
+		if (io_rden_sm_o) begin
+			cycle_type <= 2'b11; //read
+		end;
+		if (io_wren_sm_o) begin
+		   cycle_type <= 2'b01; //write
+		end;
     end
 
     always @ (posedge clk_i) begin  //saving LPC protocol data 2 out databus
