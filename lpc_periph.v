@@ -43,16 +43,16 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, current_state_o
 
     // Helper signals
     input  wire        addr_hit_i;
-    output reg  [ 4:0] current_state_o;
-    input  wire [ 7:0] din_i;
-    output reg  [ 7:0] lpc_data_in_o;
-    output wire [ 3:0] lpc_data_out_o;
-    output wire [15:0] lpc_addr_o;
-    output wire        lpc_en_o;
-    output wire        io_rden_sm_o;
-    output wire        io_wren_sm_o;
-    output reg  [31:0] TDATA;
-    output reg         READY;
+    output reg  [ 4:0] current_state_o;  //Current peripheral state (FSM)
+    input  wire [ 7:0] din_i;            //Data sent when host requests a read
+    output reg  [ 7:0] lpc_data_in_o;    //Data received by peripheral for writing
+    output wire [ 3:0] lpc_data_out_o;   //Data sent to host when a read is requested
+    output wire [15:0] lpc_addr_o;       //16-bit LPC Peripheral Address
+    output wire        lpc_en_o;         //Active-high status signal indicating the peripheral is ready for next operation.
+    output wire        io_rden_sm_o;     //Active-high read status
+    output wire        io_wren_sm_o;     //Active-high write status
+    output reg  [31:0] TDATA;            //32-bit register with LPC cycle: Address, Data(8-bit) and type of opertion
+    output reg         READY;            //Active-high status signal indicating that new cycle data is on TDATA
 
     // Internal signals
     reg         sync_en;
@@ -60,19 +60,19 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, current_state_o
     wire  [1:0] wr_data_en;
     wire  [1:0] rd_data_en;
     reg         tar_F;
-    reg  [15:0] lpc_addr_o_reg;
+    reg  [15:0] lpc_addr_o_reg;   //16-bit internal LPC address register
 
-    reg   [4:0] fsm_next_state;
-    reg   [4:0] previous_state;
+    reg   [4:0] fsm_next_state;   //State: next state of FSM
+    reg   [4:0] previous_state;   //State: previous state of FSM
 
     reg   [1:0] cycle_type = 2'b00; //"00" none, "01" write, "11" read
-    integer cycle_cnt = 0;
-    reg  [31:0] dinAbuf = 32'b00000000000000000000000000000000;
+    integer cycle_cnt = 0;          //auxiliary clock periods counter
+    reg  [31:0] dinAbuf = 32'b00000000000000000000000000000000; //32-bit register buffer for LPC cycle data (encoded)
 
     reg  [31:0] memoryLPC [0:2]; //memory array 2x32bit
-    reg wasLframeLow = 1'b0;
-    reg wasLpc_enHigh = 1'b0;
-    reg newValuedata = 1'b0;
+    reg wasLframeLow = 1'b0;     //indicates that new LPC cycle started
+    reg wasLpc_enHigh = 1'b0;    //indicates that all current cycle data is ready
+    reg newValuedata = 1'b0;     //indicates that data on TDATA had been changed
 
     assign lpc_addr_o = lpc_addr_o_reg;
 
