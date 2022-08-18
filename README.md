@@ -59,7 +59,7 @@ git clone https://github.com/lpn-plant/lpntpm-lpc-verilog.git
    simulator understands:
 
 ```bash
-iverilog -o lpc_peri_module lpc_periph_tb.v lpc_periph.v lpc_host.v
+iverilog -o lpc_peri_module lpc_periph_tb.v lpc_periph.v lpc_host.v lpc_defines.v
 ```
 
 > It is likely that one can see a few warnings - these are not that important
