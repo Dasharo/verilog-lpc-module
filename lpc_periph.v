@@ -73,7 +73,8 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, current_state_o
     reg wasLframeLow = 1'b0;     //indicates that new LPC cycle started
     reg wasLpc_enHigh = 1'b0;    //indicates that all current cycle data is ready
     reg newValuedata = 1'b0;     //indicates that data on TDATA had been changed
-
+    reg skipCycle;               // 1 -indicates that this cycle is not I/O or TPM cycle, 0 - indicates I/O or TPM cycle
+    
     assign lpc_addr_o = lpc_addr_o_reg;
 
     always @ (posedge clk_i) begin    //save cycle type
@@ -136,14 +137,16 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, current_state_o
         case(current_state_o)
             `LPC_ST_IDLE:
              begin
+                 skipCycle <= 1'b0;
                  if (nrst_i == 1'b0) fsm_next_state <= `LPC_ST_IDLE;
                  else if ((lframe_i == 1'b0) && (lad_bus == 4'h0)) fsm_next_state <= `LPC_ST_START;
              end
              `LPC_ST_START:
               begin
                   if ((lframe_i == 1'b0) && (lad_bus == 4'h0)) fsm_next_state <= `LPC_ST_START;
+                  else if ((lframe_i == 1'b1) && (lad_bus != 4'h0) && (lad_bus != 4'h2)) skipCycle = 1'b1;
                   else if ((lframe_i == 1'b1) && (lad_bus == 4'h0)) fsm_next_state <= `LPC_ST_CYCTYPE_RD;
-                  else if ((lframe_i == 1'b1) && (lad_bus == 4'h2)) fsm_next_state <= `LPC_ST_CYCTYPE_WR;
+                  else if ((lframe_i == 1'b1) && (lad_bus == 4'h2)) fsm_next_state <= `LPC_ST_CYCTYPE_WR;                
               end
               `LPC_ST_CYCTYPE_RD:
                fsm_next_state <= `LPC_ST_ADDR_RD_CLK1;
@@ -156,11 +159,11 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, current_state_o
               `LPC_ST_ADDR_RD_CLK4:
                fsm_next_state <= `LPC_ST_TAR_RD_CLK1;
               `LPC_ST_TAR_RD_CLK1:
-               fsm_next_state = `LPC_ST_TAR_RD_CLK2;
+               fsm_next_state <= `LPC_ST_TAR_RD_CLK2;
               `LPC_ST_TAR_RD_CLK2:
                begin
-                   if (addr_hit_i == 1'b0) fsm_next_state = `LPC_ST_IDLE;
-                   if (addr_hit_i == 1'b1) fsm_next_state = `LPC_ST_SYNC_RD;
+                   if (addr_hit_i == 1'b0) fsm_next_state <= `LPC_ST_IDLE;
+                   if (addr_hit_i == 1'b1) fsm_next_state <= `LPC_ST_SYNC_RD;
                end
               `LPC_ST_SYNC_RD:
                fsm_next_state <= `LPC_ST_DATA_RD_CLK1;
@@ -226,11 +229,11 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, current_state_o
         if (wr_data_en[1]) lpc_data_in_o[7:4] <= lad_bus;
     end
 
-    assign lpc_en_o = (sync_en == 1'b1 ) ? 1'h1 :
-                      (tar_F == 1'b1 ) ? 1'h1 :
+    assign lpc_en_o = ((!skipCycle)&&(sync_en == 1'b1)) ? 1'h1 :
+                      ((!skipCycle)&&(tar_F == 1'b1 )) ? 1'h1 :
                       (lframe_i == 1'b0 ) ? 1'h0 :
-                      (rd_data_en[0] == 1'b1) ? 1'b1 :
-                      (rd_data_en[1] == 1'b1) ? 1'b1 :
+                      ((!skipCycle)&&(rd_data_en[0] == 1'b1)) ? 1'b1 :
+                      ((!skipCycle)&&(rd_data_en[1] == 1'b1)) ? 1'b1 :
                       1'h0;
 
     always @(*) begin

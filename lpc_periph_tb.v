@@ -59,7 +59,8 @@ module lpc_periph_tb();
     wire        READYNET;
     reg  [15:0] u_addr;    //auxiliary host addres
     reg   [7:0] u_data;    //auxiliary host data
-    integer i;
+    integer i, j;
+    reg memory_cycle_sig;
 
     initial
     begin
@@ -82,6 +83,8 @@ module lpc_periph_tb();
         wr_flag = 1;
         #40 nrst_i = 0;
         #250 nrst_i = 1;
+        
+        memory_cycle_sig = 0;
 
         // Perform write
         #40  lframe_i = 0;
@@ -117,6 +120,8 @@ module lpc_periph_tb();
         #250 nrst_i = 1;
 
         for (i = 0; i <= 128; i = i + 1) begin
+          for(j = 0; j < 2; j = j + 1) begin
+            memory_cycle_sig = j; //Cycle type: Memory or I/O
             // Perform write
             #40  lframe_i  = 0;
             rd_flag = 0;
@@ -135,7 +140,8 @@ module lpc_periph_tb();
 
             #250 nrst_i = 1;
             #400 lframe_i = 1;
-        end;
+          end   
+        end
 
         #8000;
         //------------------------------
@@ -153,6 +159,7 @@ module lpc_periph_tb();
     .ctrl_lframe_i(lframe_i),
     .ctrl_rd_status_i(rd_flag),
     .ctrl_wr_status_i(wr_flag),
+    .ctrl_memory_cycle_i(memory_cycle_sig),
     // Output to GPIO
     .ctrl_data_o(host_data_o),
     .ctrl_ready_o(host_ready),

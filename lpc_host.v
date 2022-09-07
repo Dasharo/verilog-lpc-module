@@ -28,7 +28,7 @@
 `include "lpc_defines.v"
 
 module lpc_host (clk_i, ctrl_addr_i, ctrl_data_i, ctrl_nrst_i, ctrl_lframe_i,
-                 ctrl_rd_status_i, ctrl_wr_status_i,
+                 ctrl_rd_status_i, ctrl_wr_status_i, ctrl_memory_cycle_i,
                  ctrl_data_o, ctrl_ready_o, ctrl_host_state_o,
                  LPC_LAD, LPC_LCLK, LPC_LRESET, LPC_LFRAME
 );
@@ -43,6 +43,7 @@ module lpc_host (clk_i, ctrl_addr_i, ctrl_data_i, ctrl_nrst_i, ctrl_lframe_i,
     input  wire        ctrl_lframe_i;
     input  wire        ctrl_rd_status_i;
     input  wire        ctrl_wr_status_i;
+    input  wire        ctrl_memory_cycle_i; // 1- means Memory cycle, 0 - means I/O cycle
 
     // Control signals (output)
     output reg  [ 7:0] ctrl_data_o;
@@ -99,18 +100,31 @@ module lpc_host (clk_i, ctrl_addr_i, ctrl_data_i, ctrl_nrst_i, ctrl_lframe_i,
         else LPC_LRESET = 1;
         end
         else if (fsm_host_state == `LPC_ST_START) begin
-            if (ctrl_lframe_i & ctrl_rd_status_i) begin
-                LPC_LFRAME  = 1;
-                lad_out = 4'b0000;
-                fsm_host_state = `LPC_ST_CYCTYPE_RD;
-            end
-            else if (ctrl_lframe_i & ctrl_wr_status_i) begin
-                LPC_LFRAME  = 1;
-                lad_out = 4'b0010;
-                fsm_host_state = `LPC_ST_CYCTYPE_WR;
-            end
+           if (~ctrl_memory_cycle_i) begin
+                if (ctrl_lframe_i & ctrl_rd_status_i) begin
+                    LPC_LFRAME  = 1;
+                    lad_out = 4'b0000;
+                    fsm_host_state = `LPC_ST_CYCTYPE_RD;
+                end
+                else if (ctrl_lframe_i & ctrl_wr_status_i) begin
+                    LPC_LFRAME  = 1;
+                    lad_out = 4'b0010;
+                    fsm_host_state = `LPC_ST_CYCTYPE_WR;
+                end
+           end  if (ctrl_memory_cycle_i) begin
+                if (ctrl_lframe_i & ctrl_rd_status_i) begin
+                    LPC_LFRAME  = 1;
+                    lad_out = 4'b0100;
+                    fsm_host_state = `LPC_ST_CYCTYPE_MEMORY_RD;
+                end
+                else if (ctrl_lframe_i & ctrl_wr_status_i) begin
+                    LPC_LFRAME  = 1;
+                    lad_out = 4'b0110;
+                    fsm_host_state = `LPC_ST_CYCTYPE_MEMORY_WR;
+                end
+           end
         end
-        else if (fsm_host_state == `LPC_ST_CYCTYPE_RD) begin
+        else if ((fsm_host_state == `LPC_ST_CYCTYPE_RD) || (fsm_host_state == `LPC_ST_CYCTYPE_MEMORY_RD)) begin
             lad_out = ctrl_addr_i[15:12];
             fsm_host_state = `LPC_ST_ADDR_RD_CLK1;
         end
@@ -157,7 +171,7 @@ module lpc_host (clk_i, ctrl_addr_i, ctrl_data_i, ctrl_nrst_i, ctrl_lframe_i,
         else if (fsm_host_state == `LPC_ST_DATA_RD_CLK2) begin
             fsm_host_state = `LPC_ST_FINAL_TAR_CLK1;
         end
-        else if (fsm_host_state == `LPC_ST_CYCTYPE_WR) begin
+        else if ((fsm_host_state == `LPC_ST_CYCTYPE_WR) || (fsm_host_state == `LPC_ST_CYCTYPE_MEMORY_WR)) begin
             lad_out = ctrl_addr_i[15:12];
             fsm_host_state = `LPC_ST_ADDR_WR_CLK1;
         end
