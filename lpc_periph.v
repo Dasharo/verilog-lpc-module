@@ -146,7 +146,7 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, current_state_o
                   if ((lframe_i == 1'b0) && (lad_bus == 4'h0)) fsm_next_state <= `LPC_ST_START;
                   else if ((lframe_i == 1'b1) && (lad_bus != 4'h0) && (lad_bus != 4'h2)) skipCycle = 1'b1;
                   else if ((lframe_i == 1'b1) && (lad_bus == 4'h0)) fsm_next_state <= `LPC_ST_CYCTYPE_RD;
-                  else if ((lframe_i == 1'b1) && (lad_bus == 4'h2)) fsm_next_state <= `LPC_ST_CYCTYPE_WR;                
+                  else if ((lframe_i == 1'b1) && (lad_bus == 4'h2)) fsm_next_state <= `LPC_ST_CYCTYPE_WR;
               end
               `LPC_ST_CYCTYPE_RD:
                fsm_next_state <= `LPC_ST_ADDR_RD_CLK1;
