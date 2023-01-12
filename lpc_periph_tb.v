@@ -106,6 +106,20 @@ module lpc_periph_tb();
         rd_flag = 1;
         wr_flag = 0;
         #80  lframe_i = 1;
+        
+        // Perform read
+        #800 lframe_i = 0;
+        periph_data_i = 8'h88;
+        rd_flag = 1;
+        wr_flag = 0;
+        #80  lframe_i = 1;
+        
+        // Perform read
+        #800 lframe_i = 0;
+        periph_data_i = 8'h88;
+        rd_flag = 1;
+        wr_flag = 0;
+        #80  lframe_i = 1;
 
         addr_hit = 0;
         nrst_i = 1;
@@ -119,18 +133,20 @@ module lpc_periph_tb();
         wr_flag = 1;
         #40 nrst_i = 0;
         #250 nrst_i = 1;
+        
+        #600 lframe_i = 1;
 
         for (i = 0; i <= 128; i = i + 1) begin
           for(j = 0; j < 2; j = j + 1) begin
             memory_cycle_sig = j; //Cycle type: Memory or I/O
             // Perform write
-            #40  lframe_i  = 0;
+            #200  lframe_i  = 0;
             rd_flag = 0;
             wr_flag  = 1;
             host_addr_i = u_addr+i;
             host_wr_i  = u_data+i;
-            #40 lframe_i = 1;
-            #400 lframe_i = 0;
+            #200 lframe_i = 1;
+            #800 lframe_i = 0;
 
             // Perform read
             #800 lframe_i = 0;
