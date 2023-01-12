@@ -24,10 +24,10 @@
 // Public License along with this source; if not, download it
 // from http://www.opencores.org/lgpl.shtml
 
-`define LPC_START       4'b0000
+`define LPC_START       4'b0101
 `define LPC_STOP        4'b1111
 `define LPC_FW_READ     4'b1101
-`define LPC_FW_WRITE    4'b1110
+`define LPC_FW_TPM_WRITE    4'b1110
 
 `define LPC_SYNC_READY  4'b0000             // LPC Sync Ready
 `define LPC_SYNC_SWAIT  4'b0101             // LPC Sync Short Wait (up to 8 cycles)
@@ -36,31 +36,33 @@
 `define LPC_SYNC_ERROR  4'b1010             // LPC Sync Error
 
 // FSM states definitions
-`define LPC_ST_FORCE_RESET      5'h00   // Force reset (used in the host FSM only)
-`define LPC_ST_IDLE             5'h01   // LPC Idle state
-`define LPC_ST_START            5'h02   // LPC Start state
-`define LPC_ST_CYCTYPE_RD       5'h03   // LPC Cycle Type state (read)
-`define LPC_ST_ADDR_RD_CLK1     5'h04   // LPC Address state (read, 1st cycle)
-`define LPC_ST_ADDR_RD_CLK2     5'h05   // LPC Address state (read, 2nd cycle)
-`define LPC_ST_ADDR_RD_CLK3     5'h06   // LPC Address state (read, 3rd cycle)
-`define LPC_ST_ADDR_RD_CLK4     5'h07   // LPC Address state (read, 4th cycle)
-`define LPC_ST_TAR_RD_CLK1      5'h08   // LPC Turnaround (read, 1st cycle)
-`define LPC_ST_TAR_RD_CLK2      5'h09   // LPC Turnaround (read, 2nd cycle)
-`define LPC_ST_SYNC_RD          5'h0A   // LPC Sync State (read, may be multiple cycles for wait-states)
-`define LPC_ST_DATA_RD_CLK1     5'h0B   // LPC Data state (read, 1st cycle)
-`define LPC_ST_DATA_RD_CLK2     5'h0C   // LPC Data state (read, 2nd cycle)
-`define LPC_ST_CYCTYPE_WR       5'h0D   // LPC Cycle Type state (write)
-`define LPC_ST_ADDR_WR_CLK1     5'h0E   // LPC Address state (write, 1st cycle)
-`define LPC_ST_ADDR_WR_CLK2     5'h0F   // LPC Address state (write, 2nd cycle)
-`define LPC_ST_ADDR_WR_CLK3     5'h10   // LPC Address state (write, 3rd cycle)
-`define LPC_ST_ADDR_WR_CLK4     5'h11   // LPC Address state (write, 4th cycle)
-`define LPC_ST_DATA_WR_CLK1     5'h12   // LPC Data state (write, 1st cycle)
-`define LPC_ST_DATA_WR_CLK2     5'h13   // LPC Data state (write, 2nd cycle)
-`define LPC_ST_TAR_WR_CLK1      5'h14   // LPC Turnaround (write, 1st cycle)
-`define LPC_ST_TAR_WR_CLK2      5'h15   // LPC Turnaround (write, 2nd cycle)
-`define LPC_ST_SYNC_WR          5'h16   // LPC Sync State (write, may be multiple cycles for wait-states)
-`define LPC_ST_FINAL_TAR_CLK1   5'h17   // LPC Turnaround (final, 1st cycle)
-`define LPC_ST_FINAL_TAR_CLK2   5'h18   // LPC Turnaround (final, 2nd cycle)
+`define LPC_ST_FORCE_RESET          5'h00   // Force reset (used in the host FSM only)
+`define LPC_ST_IDLE                 5'h01   // LPC Idle state
+`define LPC_ST_START                5'h02   // LPC Start state
+`define LPC_ST_CYCTYPE_TPM_RD       5'h03   // LPC Cycle Type state (read)
+`define LPC_ST_ADDR_TPM_RD_CLK1     5'h04   // LPC Address state (read, 1st cycle)
+`define LPC_ST_ADDR_TPM_RD_CLK2     5'h05   // LPC Address state (read, 2nd cycle)
+`define LPC_ST_ADDR_TPM_RD_CLK3     5'h06   // LPC Address state (read, 3rd cycle)
+`define LPC_ST_ADDR_TPM_RD_CLK4     5'h07   // LPC Address state (read, 4th cycle)
+`define LPC_ST_TAR_TPM_RD_CLK1      5'h08   // LPC Turnaround (read, 1st cycle)
+`define LPC_ST_TAR_TPM_RD_CLK2      5'h09   // LPC Turnaround (read, 2nd cycle)
+`define LPC_ST_SYNC_TPM_RD          5'h0A   // LPC Sync State (read, may be multiple cycles for wait-states)
+`define LPC_ST_DATA_TPM_RD_CLK1     5'h0B   // LPC Data state (read, 1st cycle)
+`define LPC_ST_DATA_TPM_RD_CLK2     5'h0C   // LPC Data state (read, 2nd cycle)
+`define LPC_ST_CYCTYPE_TPM_WR       5'h0D   // LPC Cycle Type state (write)
+`define LPC_ST_ADDR_TPM_WR_CLK1     5'h0E   // LPC Address state (write, 1st cycle)
+`define LPC_ST_ADDR_TPM_WR_CLK2     5'h0F   // LPC Address state (write, 2nd cycle)
+`define LPC_ST_ADDR_TPM_WR_CLK3     5'h10   // LPC Address state (write, 3rd cycle)
+`define LPC_ST_ADDR_TPM_WR_CLK4     5'h11   // LPC Address state (write, 4th cycle)
+`define LPC_ST_DATA_TPM_WR_CLK1     5'h12   // LPC Data state (write, 1st cycle)
+`define LPC_ST_DATA_TPM_WR_CLK2     5'h13   // LPC Data state (write, 2nd cycle)
+`define LPC_ST_TAR_TPM_WR_CLK1      5'h14   // LPC Turnaround (write, 1st cycle)
+`define LPC_ST_TAR_TPM_WR_CLK2      5'h15   // LPC Turnaround (write, 2nd cycle)
+`define LPC_ST_SYNC_TPM_WR          5'h16   // LPC Sync State (write, may be multiple cycles for wait-states)
+`define LPC_ST_FINAL_TAR_CLK1       5'h17   // LPC Turnaround (final, 1st cycle)
+`define LPC_ST_FINAL_TAR_CLK2       5'h18   // LPC Turnaround (final, 2nd cycle)
+`define LPC_ST_CYCTYPE_MEMORY_TPM_RD   5'h19  //LPC Memory Read (new)
+`define LPC_ST_CYCTYPE_MEMORY_TPM_WR   5'h1A  //LPC Memory Write (new)
 
 `define WB_SEL_BYTE     4'b0001             // Byte Transfer
 `define WB_SEL_SHORT    4'b0011             // Short Transfer
