@@ -131,7 +131,7 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, current_state_o
         end
     end
 
-    always @ (posedge clk_i or negedge nrst_i) begin
+    always @ (posedge clk_i) begin
         if (nrst_i == 1'b0) fsm_next_state <= `LPC_ST_IDLE;
         if (lframe_i == 1'b0) fsm_next_state <= `LPC_ST_IDLE;
         case(current_state_o)
