@@ -1,9 +1,5 @@
 ---
 name: lint-verilog
-on:
-  pull_request:
-    branches:
-        - main
 
 jobs:
   lint-verilog:

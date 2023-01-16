@@ -1,0 +1,8 @@
+repos:
+  - repo: https://github.com/3mdeb/verilog-cleaner
+    rev: 477abb3bde94efba40828bf4ed92817c16731c8c
+    hooks:
+      - id: verilator-lint
+      - id: verible-verilog-lint
+      - id: verible-verilog-syntax
+      - id: verible-verilog-format
