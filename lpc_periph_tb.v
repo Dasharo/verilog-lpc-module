@@ -28,45 +28,44 @@
 module lpc_periph_tb();
 
     reg         addr_hit;
-    reg         rd_flag;
-    reg         wr_flag;
-    reg         clk_i;
-    reg         nrst_i;
-    reg         lframe_i;
-    reg  [15:0] host_addr_i = 16'h0000; //ctrl_addr_i to input to the LPC host
+    reg         rd_flag;  //indicates that this is read cycle
+    reg         wr_flag;  //indicates that this is write cycle
+    reg         clk_i;    //input clock
+    reg         nrst_i;   //asynchronous reset - active Low
+    reg         lframe_i; //active low signal indicating new LPC frame
+    reg  [15:0] host_addr_i = 16'h0000; //LPC host addres to input to the LPC host
     reg  [ 7:0] host_wr_i = 7'h00;
     reg  [ 7:0] periph_data_i = 7'h00;
 
     wire [ 7:0] periph_wr_o;
-    wire [15:0] periph_addr_o; //ctrl_addr_i received by the LPC peripheral
+    wire [15:0] periph_addr_o; //LPC addres received by the LPC peripheral
     wire  [7:0] host_data_o;
     wire  [3:0] periph_rd_out;
-    wire        host_ready;
+    wire        host_ready;    //indicates that host is ready for next cycle
 
     wire        periph_rd_status;
-    wire        periph_wr_status; //status: current peripheral read/write operation
-    wire  [4:0] current_periph_state; //status: current peripheral state
-    wire  [4:0] current_host_state; //status: current host state
-    wire        periph_en;                      //status: peripheral is enabled
+    wire        periph_wr_status;      //status: current peripheral read operation
+    wire  [4:0] current_periph_state;  //status: current peripheral state
+    wire  [4:0] current_host_state;    //status: current host state
+    wire        periph_en;             //status: peripheral is ready to new cycle
 
-    wire        LCLK;
-    wire        LRESET;
-    wire        LFRAME;
-    wire  [3:0] LAD = 4'bZZZZ;
+    wire        LCLK;           //Host LPC output clock
+    wire        LRESET;         //Host LReset
+    wire        LFRAME;         //Host LFRAME
+    wire  [3:0] LAD = 4'bZZZZ; //Bi-directional (tri-state) LPC bus (multiplexed addres and data 4-bit chunks)
 
-    wire [31:0] TDATABOu;
+    wire [31:0] TDATABOu;   //32-bit LPC cycle data (16-bit address, 8-bit LPC data, type of cycle)
     reg         READYBOu;
     wire        READYNET;
-    reg  [12:0] cnt_clk;
-    reg  [15:0] u_addr;
-    reg   [7:0] u_data;
-    integer i;
+    reg  [15:0] u_addr;    //auxiliary host addres
+    reg   [7:0] u_data;    //auxiliary host data
+    integer i, j;
+    reg memory_cycle_sig;
 
     initial
     begin
         clk_i = 1'b1;
         READYBOu = 1'b0;
-        cnt_clk <= 13'b0000000000000;
         forever
             #20 clk_i = ~clk_i;
     end
@@ -84,6 +83,8 @@ module lpc_periph_tb();
         wr_flag = 1;
         #40 nrst_i = 0;
         #250 nrst_i = 1;
+        
+        memory_cycle_sig = 0;
 
         // Perform write
         #40  lframe_i = 0;
@@ -119,6 +120,8 @@ module lpc_periph_tb();
         #250 nrst_i = 1;
 
         for (i = 0; i <= 128; i = i + 1) begin
+          for(j = 0; j < 2; j = j + 1) begin
+            memory_cycle_sig = j; //Cycle type: Memory or I/O
             // Perform write
             #40  lframe_i  = 0;
             rd_flag = 0;
@@ -137,7 +140,8 @@ module lpc_periph_tb();
 
             #250 nrst_i = 1;
             #400 lframe_i = 1;
-        end;
+          end   
+        end
 
         #8000;
         //------------------------------
@@ -155,6 +159,7 @@ module lpc_periph_tb();
     .ctrl_lframe_i(lframe_i),
     .ctrl_rd_status_i(rd_flag),
     .ctrl_wr_status_i(wr_flag),
+    .ctrl_memory_cycle_i(memory_cycle_sig),
     // Output to GPIO
     .ctrl_data_o(host_data_o),
     .ctrl_ready_o(host_ready),
