@@ -17,6 +17,38 @@ It can be also easily simulated in open-source Verilog simulator - [Icarus
 Verilog](http://iverilog.icarus.com/) and visualized in the
 [GTKWave](http://gtkwave.sourceforge.net/).
 
+### pre-commit hooks
+
+- [Install pre-commit](https://pre-commit.com/index.html#install), if you
+  followed [local build](#local-build) procedure `pre-commit` should be
+  installed
+
+- [Install docker](https://docs.docker.com/engine/install/ubuntu/)
+
+- Install hooks into repo:
+
+```shell
+pre-commit install --hook-type commit-msg
+```
+
+- Enjoy automatic checks on each `git commit` action!
+
+- (Optional) Run hooks on all files (for example, when adding new hooks or
+  configuring existing ones):
+
+```shell
+pre-commit run --all-files
+```
+
+### To skip verification
+
+In some cases, it may be needed to skip `pre-commit` tests. To do that, please
+use:
+
+```shell
+git commit --no-verify
+```
+
 ## Simulation
 
 ### Prerequisites
