@@ -35,8 +35,8 @@ module lpc_periph_tb();
     reg         nrst_i;   //asynchronous reset - active Low
     reg         lframe_i; //active low signal indicating new LPC frame
     reg  [15:0] host_addr_i = 16'h0000; //LPC host addres to input to the LPC host
-    reg  [ 7:0] host_wr_i = 7'h00;
-    reg  [ 7:0] periph_data_i = 7'h00;
+    reg  [ 7:0] host_wr_i = 8'h00;
+    reg  [ 7:0] periph_data_i = 8'h00;
 
     wire [ 7:0] periph_wr_o;
     wire [15:0] periph_addr_o; //LPC addres received by the LPC peripheral
