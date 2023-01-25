@@ -77,14 +77,14 @@ module lpc_host (clk_i, ctrl_addr_i, ctrl_data_i, ctrl_nrst_i, ctrl_lframe_i,
                 LPC_LRESET  = 0;
                 LPC_LFRAME  = 1;
                 lad_en  = 0;
-                lad_out = 4'b0000;
+                lad_out = `LPC_START;
                 ctrl_ready_o   = 0;
             end
         else begin
             LPC_LRESET  = 1;
             LPC_LFRAME  = 1;
             lad_en  = 0;
-            lad_out = 4'b0000;
+            lad_out = `LPC_START;
             ctrl_ready_o   = 0;
             fsm_host_state = `LPC_ST_IDLE;
         end
@@ -93,7 +93,7 @@ module lpc_host (clk_i, ctrl_addr_i, ctrl_data_i, ctrl_nrst_i, ctrl_lframe_i,
             if (~ctrl_lframe_i) begin
             LPC_LFRAME  = 0;
             lad_en  = 1;
-            lad_out = 4'b0000;
+            lad_out = `LPC_START;
             ctrl_ready_o   = 0;
             fsm_host_state = `LPC_ST_START;
         end
@@ -159,7 +159,7 @@ module lpc_host (clk_i, ctrl_addr_i, ctrl_data_i, ctrl_nrst_i, ctrl_lframe_i,
                 LPC_LRESET = 0;
                 LPC_LFRAME = 1;
                 lad_en = 0;
-                lad_out = 4'b0000;
+                lad_out = `LPC_START;
                 ctrl_ready_o = 0;
                 fsm_host_state = `LPC_ST_FORCE_RESET;
             end
@@ -212,7 +212,7 @@ module lpc_host (clk_i, ctrl_addr_i, ctrl_data_i, ctrl_nrst_i, ctrl_lframe_i,
                 LPC_LRESET = 0;
                 LPC_LFRAME = 1;
                 lad_en = 0;
-                lad_out = 4'b0000;
+                lad_out = `LPC_START;
                 ctrl_ready_o = 0;
                 fsm_host_state = `LPC_ST_FORCE_RESET;
             end
@@ -222,7 +222,7 @@ module lpc_host (clk_i, ctrl_addr_i, ctrl_data_i, ctrl_nrst_i, ctrl_lframe_i,
                 LPC_LRESET = 0;
                 LPC_LFRAME = 1;
                 lad_en = 0;
-                lad_out = 4'b0000;
+                lad_out = `LPC_START;
                 ctrl_ready_o = 0;
                 fsm_host_state = `LPC_ST_FORCE_RESET;
             end

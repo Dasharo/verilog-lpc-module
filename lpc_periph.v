@@ -139,14 +139,14 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, current_state_o
              begin
                  skipCycle <= 1'b0;
                  if (nrst_i == 1'b0) fsm_next_state <= `LPC_ST_IDLE;
-                 else if ((lframe_i == 1'b0) && (lad_bus == 4'h0)) fsm_next_state <= `LPC_ST_START;
+                 else if ((lframe_i == 1'b0) && (lad_bus == `LPC_START)) fsm_next_state <= `LPC_ST_START;
              end
              `LPC_ST_START:
               begin
-                  if ((lframe_i == 1'b0) && (lad_bus == 4'h0)) fsm_next_state <= `LPC_ST_START;
-                  else if ((lframe_i == 1'b1) && (lad_bus != 4'h0) && (lad_bus != 4'h2)) skipCycle = 1'b1;
-                  else if ((lframe_i == 1'b1) && (lad_bus == 4'h0)) fsm_next_state <= `LPC_ST_CYCTYPE_RD;
-                  else if ((lframe_i == 1'b1) && (lad_bus == 4'h2)) fsm_next_state <= `LPC_ST_CYCTYPE_WR;
+                  if ((lframe_i == 1'b0) && (lad_bus == `LPC_START)) fsm_next_state <= `LPC_ST_START;
+                  else if ((lframe_i == 1'b1) && (lad_bus != `LPC_IO_READ) && (lad_bus != `LPC_IO_WRITE)) skipCycle = 1'b1;
+                  else if ((lframe_i == 1'b1) && (lad_bus == `LPC_IO_READ)) fsm_next_state <= `LPC_ST_CYCTYPE_RD;
+                  else if ((lframe_i == 1'b1) && (lad_bus == `LPC_IO_WRITE)) fsm_next_state <= `LPC_ST_CYCTYPE_WR;
               end
               `LPC_ST_CYCTYPE_RD:
                fsm_next_state <= `LPC_ST_ADDR_RD_CLK1;

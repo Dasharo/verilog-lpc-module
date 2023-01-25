@@ -29,6 +29,9 @@
 `define LPC_FW_READ     4'b1101
 `define LPC_FW_WRITE    4'b1110
 
+`define LPC_IO_READ 4'b0000             // LPC I/O (or TPM I/O) read cycle
+`define LPC_IO_WRITE 4'b0010            // LPC I/O (or TPM I/O) write cycle
+
 `define LPC_SYNC_READY  4'b0000             // LPC Sync Ready
 `define LPC_SYNC_SWAIT  4'b0101             // LPC Sync Short Wait (up to 8 cycles)
 `define LPC_SYNC_LWAIT  4'b0110             // LPC Sync Long Wait (no limit)
