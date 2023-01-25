@@ -46,7 +46,7 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, current_state_o
     output reg  [ 4:0] current_state_o;  //Current peripheral state (FSM)
     input  wire [ 7:0] din_i;            //Data sent when host requests a read
     output reg  [ 7:0] lpc_data_in_o;    //Data received by peripheral for writing
-    output wire [ 3:0] lpc_data_out_o;   //Data sent to host when a read is requested
+    output reg  [ 3:0] lpc_data_out_o;   //Data sent to host when a read is requested
     output wire [15:0] lpc_addr_o;       //16-bit LPC Peripheral Address
     output wire        lpc_en_o;         //Active-high status signal indicating the peripheral is ready for next operation.
     output wire        io_rden_sm_o;     //Active-high read status
@@ -131,7 +131,7 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, current_state_o
         end
     end
 
-    always @(*) begin
+    always @ (posedge clk_i or negedge nrst_i) begin
         if (nrst_i == 1'b0) fsm_next_state <= `LPC_ST_IDLE;
         if (lframe_i == 1'b0) fsm_next_state <= `LPC_ST_IDLE;
         case(current_state_o)
@@ -209,12 +209,14 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, current_state_o
                         (fsm_next_state == `LPC_ST_DATA_RD_CLK2) ? 2'b10 :
                         2'b00;
 
-    assign lpc_data_out_o = (sync_en == 1'b1) ? 4'h0 :
-                            (tar_F == 1'b1 ) ? 4'hF :
-                            (lframe_i == 1'b0 ) ? 4'h0 :
-                            (rd_data_en[0] == 1'b1) ? din_i[3:0] :
-                            (rd_data_en[1] == 1'b1) ? din_i[7:4] :
-                            4'h0;
+    always @ (posedge clk_i) begin
+       if (sync_en == 1'b1) lpc_data_out_o <= 4'h0;
+       else if (tar_F == 1'b1) lpc_data_out_o <= 4'hF;
+       else if (lframe_i == 1'b0) lpc_data_out_o <= 4'h0;
+       else if (rd_data_en[0] == 1'b1) lpc_data_out_o <= din_i[3:0];
+       else if (rd_data_en[1] == 1'b1) lpc_data_out_o <= din_i[7:4];
+       else lpc_data_out_o <= 4'h0;
+    end
 
     assign lad_bus = (current_state_o == `LPC_ST_SYNC_WR) ? 4'b0000 : 4'bzzzz;
     assign lad_bus = (rd_data_en[0]) ? lpc_data_out_o: 4'bzzzz;
@@ -236,7 +238,7 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, current_state_o
                       ((!skipCycle)&&(rd_data_en[1] == 1'b1)) ? 1'b1 :
                       1'h0;
 
-    always @(*) begin
+    always @ (posedge clk_i) begin
         tar_F <= 1'b0;
         case(fsm_next_state)
             `LPC_ST_SYNC_RD:
