@@ -193,7 +193,7 @@ module lpc_periph_tb();
     .lframe_i(LFRAME),
     .lad_bus(LAD),
     .addr_hit_i(addr_hit),
-    .current_state_o(current_periph_state),
+    .prev_state_o(current_periph_state),
     .din_i(periph_data_i),
     .lpc_data_in_o(periph_wr_o),
     .lpc_data_out_o(periph_rd_out),
