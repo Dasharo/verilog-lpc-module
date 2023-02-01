@@ -192,18 +192,7 @@ module lpc_periph_tb();
     .nrst_i(LRESET),
     .lframe_i(LFRAME),
     .lad_bus(LAD),
-    .addr_hit_i(addr_hit),
-    .prev_state_o(current_periph_state),
-    .din_i(periph_data_i),
-    .lpc_data_in_o(periph_wr_o),
-    .lpc_data_out_o(periph_rd_out),
-    .lpc_addr_o(periph_addr_o),
-    .lpc_en_o(periph_en),
-    .io_wren_sm_o(periph_wr_status),
-    .io_rden_sm_o(periph_rd_status),
-    //----------------------------------
-    .TDATA(TDATABOu),
-    .READY(READYNET)
+    .prev_state_o(current_periph_state)
     );
 
 endmodule
