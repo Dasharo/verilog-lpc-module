@@ -46,16 +46,12 @@ module lpc_periph (
   // Helper signals
   output reg  [ 4:0] prev_state_o; // Previous peripheral state (FSM)
   inout  wire [ 7:0] lpc_data_io;  // Data received (I/O Write) or to be sent (I/O Read) to host
-  output wire [15:0] lpc_addr_o;   // 16-bit LPC Peripheral Address
+  output reg  [15:0] lpc_addr_o;   // 16-bit LPC Peripheral Address
 
   // Internal signals
-  reg  [15:0] lpc_addr_o_reg;      // 16-bit internal LPC address register
-
   reg   [4:0] fsm_next_state;      // State: next state of FSM
 
   // verilog_format: on
-
-  assign lpc_addr_o = lpc_addr_o_reg;
 
   always @(negedge clk_i or negedge nrst_i or posedge lframe_i) begin
     if (~nrst_i) begin
@@ -83,10 +79,22 @@ module lpc_periph (
         else fsm_next_state <= `LPC_ST_IDLE;
       end
       // Read
-      `LPC_ST_CYCTYPE_RD:     fsm_next_state <= `LPC_ST_ADDR_RD_CLK1;
-      `LPC_ST_ADDR_RD_CLK1:   fsm_next_state <= `LPC_ST_ADDR_RD_CLK2;
-      `LPC_ST_ADDR_RD_CLK2:   fsm_next_state <= `LPC_ST_ADDR_RD_CLK3;
-      `LPC_ST_ADDR_RD_CLK3:   fsm_next_state <= `LPC_ST_ADDR_RD_CLK4;
+      `LPC_ST_CYCTYPE_RD: begin
+        lpc_addr_o[15:12] <= lad_bus;
+        fsm_next_state    <= `LPC_ST_ADDR_RD_CLK1;
+      end
+      `LPC_ST_ADDR_RD_CLK1: begin
+        lpc_addr_o[11:8] <= lad_bus;
+        fsm_next_state   <= `LPC_ST_ADDR_RD_CLK2;
+      end
+      `LPC_ST_ADDR_RD_CLK2: begin
+        lpc_addr_o[7:4] <= lad_bus;
+        fsm_next_state  <= `LPC_ST_ADDR_RD_CLK3;
+      end
+      `LPC_ST_ADDR_RD_CLK3: begin
+        lpc_addr_o[3:0] <= lad_bus;
+        fsm_next_state  <= `LPC_ST_ADDR_RD_CLK4;
+      end
       `LPC_ST_ADDR_RD_CLK4:   fsm_next_state <= `LPC_ST_TAR_RD_CLK1;
       `LPC_ST_TAR_RD_CLK1:    fsm_next_state <= `LPC_ST_TAR_RD_CLK2;
       `LPC_ST_TAR_RD_CLK2:    fsm_next_state <= `LPC_ST_SYNC_RD;
@@ -94,10 +102,22 @@ module lpc_periph (
       `LPC_ST_DATA_RD_CLK1:   fsm_next_state <= `LPC_ST_DATA_RD_CLK2;
       `LPC_ST_DATA_RD_CLK2:   fsm_next_state <= `LPC_ST_FINAL_TAR_CLK1;
       // Write
-      `LPC_ST_CYCTYPE_WR:     fsm_next_state <= `LPC_ST_ADDR_WR_CLK1;
-      `LPC_ST_ADDR_WR_CLK1:   fsm_next_state <= `LPC_ST_ADDR_WR_CLK2;
-      `LPC_ST_ADDR_WR_CLK2:   fsm_next_state <= `LPC_ST_ADDR_WR_CLK3;
-      `LPC_ST_ADDR_WR_CLK3:   fsm_next_state <= `LPC_ST_ADDR_WR_CLK4;
+      `LPC_ST_CYCTYPE_WR: begin
+        lpc_addr_o[15:12] <= lad_bus;
+        fsm_next_state <= `LPC_ST_ADDR_WR_CLK1;
+      end
+      `LPC_ST_ADDR_WR_CLK1: begin
+        lpc_addr_o[11:8] <= lad_bus;
+        fsm_next_state   <= `LPC_ST_ADDR_WR_CLK2;
+      end
+      `LPC_ST_ADDR_WR_CLK2: begin
+        lpc_addr_o[7:4] <= lad_bus;
+        fsm_next_state  <= `LPC_ST_ADDR_WR_CLK3;
+      end
+      `LPC_ST_ADDR_WR_CLK3: begin
+        lpc_addr_o[3:0] <= lad_bus;
+        fsm_next_state  <= `LPC_ST_ADDR_WR_CLK4;
+      end
       `LPC_ST_ADDR_WR_CLK4:   fsm_next_state <= `LPC_ST_DATA_WR_CLK1;
       `LPC_ST_DATA_WR_CLK1:   fsm_next_state <= `LPC_ST_DATA_WR_CLK2;
       `LPC_ST_DATA_WR_CLK2:   fsm_next_state <= `LPC_ST_TAR_WR_CLK1;
