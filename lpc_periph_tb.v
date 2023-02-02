@@ -42,7 +42,7 @@ module lpc_periph_tb ();
   wire  [7:0] host_data_o;
   wire        host_ready;    // indicates that host is ready for next cycle
 
-  wire  [4:0] current_periph_state;  // status: current peripheral state
+//  wire  [4:0] current_periph_state;  // status: current peripheral state
   wire  [4:0] current_host_state;    // status: current host state
 
   wire        LCLK;           // Host LPC output clock
@@ -50,9 +50,16 @@ module lpc_periph_tb ();
   wire        LFRAME;         // Host LFRAME
   wire  [3:0] LAD = 4'bZZZZ;  // Bi-directional (tri-state) LPC bus (multiplexed address and data 4-bit chunks)
 
+  wire [ 7:0] lpc_data_io;    // Data received (I/O Write) or to be sent (I/O Read) to host
+  wire [15:0] lpc_addr_o;     // 16-bit LPC Peripheral Address
+  wire        lpc_data_wr;    // Signal to data provider that lpc_data_io has valid write data
+  reg         lpc_wr_done;    // Signal from data provider that lpc_data_io has been read
+  reg         lpc_data_rd;    // Signal from data provider that lpc_data_io has data for read
+  wire        lpc_rd_done;    // Signal to data provider that lpc_data_io has been read
+
   reg  [15:0] u_addr;         // auxiliary host address
   reg   [7:0] u_data;         // auxiliary host data
-  integer i, j;
+  integer i, j, wr_delay;
   reg memory_cycle_sig;
 
   // verilog_format: on
@@ -67,12 +74,13 @@ module lpc_periph_tb ();
     $dumpfile("lpc_periph_tb.vcd");
     $dumpvars(0, lpc_periph_tb);
 
-    lframe_i = 1;
-    addr_hit = 1;
-    nrst_i   = 1;
-    rd_flag  = 0;
-    wr_flag  = 1;
-    #40 nrst_i = 0;
+    lframe_i    = 1;
+    addr_hit    = 1;
+    nrst_i      = 1;
+    rd_flag     = 0;
+    wr_flag     = 1;
+    lpc_wr_done = 0;
+    #40 nrst_i  = 0;
     #250 nrst_i = 1;
 
     memory_cycle_sig = 0;
@@ -156,6 +164,20 @@ module lpc_periph_tb ();
     $finish;
   end
 
+  // Simulate response to write request with delay
+  always @(posedge clk_i) begin
+    if (lpc_data_wr == 1) begin
+      wr_delay = wr_delay + 1;
+      if (wr_delay > 10) begin
+        lpc_wr_done = 1;
+        wr_delay = 0;
+      end
+    end else if (lpc_data_wr == 0) begin
+      lpc_wr_done = 0;
+      wr_delay = 0;
+    end
+  end
+
   // LPC Host instantiation
   lpc_host lpc_host_inst (
       .clk_i(clk_i),
@@ -185,7 +207,12 @@ module lpc_periph_tb ();
       .nrst_i(LRESET),
       .lframe_i(LFRAME),
       .lad_bus(LAD),
-      .prev_state_o(current_periph_state)
+      .lpc_data_io(lpc_data_io),
+      .lpc_addr_o(lpc_addr_o),
+      .lpc_data_wr(lpc_data_wr),
+      .lpc_wr_done(lpc_wr_done),
+      .lpc_data_rd(lpc_data_rd),
+      .lpc_rd_done(lpc_rd_done)
   );
 
 endmodule

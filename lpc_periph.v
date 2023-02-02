@@ -33,8 +33,12 @@ module lpc_periph (
     nrst_i,
     lframe_i,
     lad_bus,
-    prev_state_o,
-    lpc_addr_o
+    lpc_data_io,
+    lpc_addr_o,
+    lpc_data_wr,
+    lpc_wr_done,
+    lpc_data_rd,
+    lpc_rd_done
 );
   // verilog_format: off  // verible-verilog-format messes up comments alignment
   // LPC interface
@@ -43,13 +47,22 @@ module lpc_periph (
   input  wire        lframe_i;     // LPC frame input (active low)
   inout  wire [ 3:0] lad_bus;      // LPC data bus
 
-  // Helper signals
-  output reg  [ 4:0] prev_state_o; // Previous peripheral state (FSM)
+  // Interface to data provider
   inout  wire [ 7:0] lpc_data_io;  // Data received (I/O Write) or to be sent (I/O Read) to host
-  output reg  [15:0] lpc_addr_o;   // 16-bit LPC Peripheral Address
+  output wire [15:0] lpc_addr_o;   // 16-bit LPC Peripheral Address
+  output wire        lpc_data_wr;  // Signal to data provider that lpc_data_io has valid write data
+  input  wire        lpc_wr_done;  // Signal from data provider that lpc_data_io has been read
+  input  wire        lpc_data_rd;  // Signal from data provider that lpc_data_io has data for read
+  output wire        lpc_rd_done;  // Signal to data provider that lpc_data_io has been read
 
   // Internal signals
-  reg   [4:0] fsm_next_state;      // State: next state of FSM
+  reg [ 4:0] prev_state_o;         // Previous peripheral state (FSM)
+  reg [ 4:0] fsm_next_state;       // State: next state of FSM
+  reg [ 7:0] lpc_data_reg = 0;     // Copy of lpc_data_io's data
+  reg [15:0] lpc_addr_reg = 0;     // Driver of lpc_addr_o
+  reg        waiting_on_write = 0;
+  reg        waiting_on_read = 0;
+  reg        driving_data = 0;
 
   // verilog_format: on
 
@@ -58,7 +71,22 @@ module lpc_periph (
       prev_state_o <= `LPC_ST_IDLE;
       // TODO: clear everything, stop driving LAD
     end else begin
-      prev_state_o <= fsm_next_state;
+      case (fsm_next_state)
+        `LPC_ST_DATA_WR_CLK1: begin
+          driving_data <= 1'b1;
+          prev_state_o <= fsm_next_state;
+        end
+        `LPC_ST_TAR_WR_CLK2: begin
+          if (lpc_wr_done == 1'b1) begin
+            driving_data     <= 1'b0;
+            waiting_on_write <= 1'b0;
+            prev_state_o <= fsm_next_state;
+          end else begin
+            waiting_on_write <= 1'b1;
+          end
+        end
+        default: prev_state_o <= fsm_next_state;
+      endcase
     end
   end
 
@@ -80,49 +108,65 @@ module lpc_periph (
       end
       // Read
       `LPC_ST_CYCTYPE_RD: begin
-        lpc_addr_o[15:12] <= lad_bus;
-        fsm_next_state    <= `LPC_ST_ADDR_RD_CLK1;
+        lpc_addr_reg[15:12] <= lad_bus;
+        fsm_next_state      <= `LPC_ST_ADDR_RD_CLK1;
       end
       `LPC_ST_ADDR_RD_CLK1: begin
-        lpc_addr_o[11:8] <= lad_bus;
-        fsm_next_state   <= `LPC_ST_ADDR_RD_CLK2;
+        lpc_addr_reg[11:8] <= lad_bus;
+        fsm_next_state     <= `LPC_ST_ADDR_RD_CLK2;
       end
       `LPC_ST_ADDR_RD_CLK2: begin
-        lpc_addr_o[7:4] <= lad_bus;
-        fsm_next_state  <= `LPC_ST_ADDR_RD_CLK3;
+        lpc_addr_reg[7:4] <= lad_bus;
+        fsm_next_state    <= `LPC_ST_ADDR_RD_CLK3;
       end
       `LPC_ST_ADDR_RD_CLK3: begin
-        lpc_addr_o[3:0] <= lad_bus;
-        fsm_next_state  <= `LPC_ST_ADDR_RD_CLK4;
+        lpc_addr_reg[3:0] <= lad_bus;
+        fsm_next_state    <= `LPC_ST_ADDR_RD_CLK4;
       end
       `LPC_ST_ADDR_RD_CLK4:   fsm_next_state <= `LPC_ST_TAR_RD_CLK1;
       `LPC_ST_TAR_RD_CLK1:    fsm_next_state <= `LPC_ST_TAR_RD_CLK2;
       `LPC_ST_TAR_RD_CLK2:    fsm_next_state <= `LPC_ST_SYNC_RD;
-      `LPC_ST_SYNC_RD:        fsm_next_state <= `LPC_ST_DATA_RD_CLK1;
-      `LPC_ST_DATA_RD_CLK1:   fsm_next_state <= `LPC_ST_DATA_RD_CLK2;
+      `LPC_ST_SYNC_RD: begin
+        fsm_next_state    <= `LPC_ST_DATA_RD_CLK1;
+      end
+      `LPC_ST_DATA_RD_CLK1: begin
+        fsm_next_state    <= `LPC_ST_DATA_RD_CLK2;
+      end
       `LPC_ST_DATA_RD_CLK2:   fsm_next_state <= `LPC_ST_FINAL_TAR_CLK1;
       // Write
       `LPC_ST_CYCTYPE_WR: begin
-        lpc_addr_o[15:12] <= lad_bus;
-        fsm_next_state <= `LPC_ST_ADDR_WR_CLK1;
+        lpc_addr_reg[15:12] <= lad_bus;
+        fsm_next_state      <= `LPC_ST_ADDR_WR_CLK1;
       end
       `LPC_ST_ADDR_WR_CLK1: begin
-        lpc_addr_o[11:8] <= lad_bus;
-        fsm_next_state   <= `LPC_ST_ADDR_WR_CLK2;
+        lpc_addr_reg[11:8] <= lad_bus;
+        fsm_next_state     <= `LPC_ST_ADDR_WR_CLK2;
       end
       `LPC_ST_ADDR_WR_CLK2: begin
-        lpc_addr_o[7:4] <= lad_bus;
-        fsm_next_state  <= `LPC_ST_ADDR_WR_CLK3;
+        lpc_addr_reg[7:4] <= lad_bus;
+        fsm_next_state    <= `LPC_ST_ADDR_WR_CLK3;
       end
       `LPC_ST_ADDR_WR_CLK3: begin
-        lpc_addr_o[3:0] <= lad_bus;
-        fsm_next_state  <= `LPC_ST_ADDR_WR_CLK4;
+        lpc_addr_reg[3:0] <= lad_bus;
+        fsm_next_state    <= `LPC_ST_ADDR_WR_CLK4;
       end
-      `LPC_ST_ADDR_WR_CLK4:   fsm_next_state <= `LPC_ST_DATA_WR_CLK1;
-      `LPC_ST_DATA_WR_CLK1:   fsm_next_state <= `LPC_ST_DATA_WR_CLK2;
-      `LPC_ST_DATA_WR_CLK2:   fsm_next_state <= `LPC_ST_TAR_WR_CLK1;
+      `LPC_ST_ADDR_WR_CLK4: begin
+        lpc_data_reg[7:4] <= lad_bus;
+        fsm_next_state    <= `LPC_ST_DATA_WR_CLK1;
+      end
+      `LPC_ST_DATA_WR_CLK1: begin
+        lpc_data_reg[3:0] <= lad_bus;
+        fsm_next_state    <= `LPC_ST_DATA_WR_CLK2;
+      end
+      `LPC_ST_DATA_WR_CLK2: begin
+//        waiting_on_write <= 1'b1;
+        fsm_next_state   <= `LPC_ST_TAR_WR_CLK1;
+      end
       `LPC_ST_TAR_WR_CLK1:    fsm_next_state <= `LPC_ST_TAR_WR_CLK2;
-      `LPC_ST_TAR_WR_CLK2:    fsm_next_state <= `LPC_ST_SYNC_WR;
+      `LPC_ST_TAR_WR_CLK2: begin
+        if (waiting_on_write == 1'b0)
+          fsm_next_state <= `LPC_ST_SYNC_WR;
+      end
       `LPC_ST_SYNC_WR:        fsm_next_state <= `LPC_ST_FINAL_TAR_CLK1;
       `LPC_ST_FINAL_TAR_CLK1: fsm_next_state <= `LPC_ST_FINAL_TAR_CLK2;
       default:                fsm_next_state <= `LPC_ST_IDLE;
@@ -133,13 +177,21 @@ module lpc_periph (
      * All LAD driving by peripheral should begin at negedge clk_i, because of
      * that states are shifted backwards by one.
      */
-  // SYNC
+  // SYNC - long wait
+  assign lad_bus = (waiting_on_write == 1'b1 ||
+                    waiting_on_read  == 1'b1) ? `LPC_SYNC_LWAIT : 4'bzzzz;
+  // SYNC - ready
   assign lad_bus = (prev_state_o == `LPC_ST_TAR_WR_CLK2 ||
-                    prev_state_o == `LPC_ST_TAR_RD_CLK2) ? 4'b0000 : 4'bzzzz;
+                    prev_state_o == `LPC_ST_TAR_RD_CLK2) ? `LPC_SYNC_READY : 4'bzzzz;
   // TAR
   assign lad_bus = (prev_state_o == `LPC_ST_SYNC_WR ||
                     prev_state_o == `LPC_ST_DATA_RD_CLK2) ? 4'b1111 : 4'bzzzz;
   assign lad_bus = (prev_state_o == `LPC_ST_SYNC_RD) ? lpc_data_io[3:0] : 4'bzzzz;
   assign lad_bus = (prev_state_o == `LPC_ST_DATA_RD_CLK1) ? lpc_data_io[7:4] : 4'bzzzz;
 
+  assign lpc_addr_o = lpc_addr_reg;
+
+  assign lpc_data_io = (driving_data == 1'b1) ? lpc_data_reg : 8'hzz;
+
+  assign lpc_data_wr = waiting_on_write;
 endmodule
