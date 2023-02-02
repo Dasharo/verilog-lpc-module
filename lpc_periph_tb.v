@@ -59,7 +59,7 @@ module lpc_periph_tb ();
 
   reg  [15:0] u_addr;         // auxiliary host address
   reg   [7:0] u_data;         // auxiliary host data
-  integer i, j, wr_delay;
+  integer i, j, wr_delay, delay;
   reg memory_cycle_sig;
 
   // verilog_format: on
@@ -80,6 +80,7 @@ module lpc_periph_tb ();
     rd_flag     = 0;
     wr_flag     = 1;
     lpc_wr_done = 0;
+    delay       = 0;
     #40 nrst_i  = 0;
     #250 nrst_i = 1;
 
@@ -87,34 +88,20 @@ module lpc_periph_tb ();
 
     // Perform write
     #40 lframe_i = 0;
-    host_addr_i = 16'hF0F0;
-    host_wr_i   = 8'h5A;
+    host_addr_i  = 16'hF0F0;
+    host_wr_i    = 8'h5A;
+    #40 lframe_i = 1;
+
+    // Perform write with delay
+    #500 delay   = 10;
+    #40 lframe_i = 0;
+    host_addr_i  = 16'h9696;
+    host_wr_i    = 8'hA5;
     #40 lframe_i = 1;
 
     // Perform read
     #800 lframe_i = 0;
     periph_data_i = 8'hA5;
-    rd_flag = 1;
-    wr_flag = 0;
-    #80 lframe_i = 1;
-
-    // Perform read
-    #800 lframe_i = 0;
-    periph_data_i = 8'h88;
-    rd_flag = 1;
-    wr_flag = 0;
-    #80 lframe_i = 1;
-
-    // Perform read
-    #800 lframe_i = 0;
-    periph_data_i = 8'h88;
-    rd_flag = 1;
-    wr_flag = 0;
-    #80 lframe_i = 1;
-
-    // Perform read
-    #800 lframe_i = 0;
-    periph_data_i = 8'h88;
     rd_flag = 1;
     wr_flag = 0;
     #80 lframe_i = 1;
@@ -168,7 +155,7 @@ module lpc_periph_tb ();
   always @(posedge clk_i) begin
     if (lpc_data_wr == 1) begin
       wr_delay = wr_delay + 1;
-      if (wr_delay > 10) begin
+      if (wr_delay > delay) begin
         lpc_wr_done = 1;
         wr_delay = 0;
       end

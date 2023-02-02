@@ -66,24 +66,27 @@ module lpc_periph (
 
   // verilog_format: on
 
+  always @(posedge lpc_wr_done) begin
+    driving_data     <= 1'b0;
+    waiting_on_write <= 1'b0;
+  end
+
   always @(negedge clk_i or negedge nrst_i or posedge lframe_i) begin
     if (~nrst_i) begin
-      prev_state_o <= `LPC_ST_IDLE;
+      prev_state_o     <= `LPC_ST_IDLE;
+      driving_data     <= 1'b0;
+      waiting_on_write <= 1'b0;
+      waiting_on_read  <= 1'b0;
       // TODO: clear everything, stop driving LAD
     end else begin
       case (fsm_next_state)
-        `LPC_ST_DATA_WR_CLK1: begin
+        `LPC_ST_DATA_WR_CLK2: begin
           driving_data <= 1'b1;
           prev_state_o <= fsm_next_state;
         end
-        `LPC_ST_TAR_WR_CLK2: begin
-          if (lpc_wr_done == 1'b1) begin
-            driving_data     <= 1'b0;
-            waiting_on_write <= 1'b0;
+        `LPC_ST_SYNC_WR: begin
+          if (waiting_on_write == 1'b0)
             prev_state_o <= fsm_next_state;
-          end else begin
-            waiting_on_write <= 1'b1;
-          end
         end
         default: prev_state_o <= fsm_next_state;
       endcase
@@ -159,14 +162,11 @@ module lpc_periph (
         fsm_next_state    <= `LPC_ST_DATA_WR_CLK2;
       end
       `LPC_ST_DATA_WR_CLK2: begin
-//        waiting_on_write <= 1'b1;
+        waiting_on_write <= 1'b1;
         fsm_next_state   <= `LPC_ST_TAR_WR_CLK1;
       end
       `LPC_ST_TAR_WR_CLK1:    fsm_next_state <= `LPC_ST_TAR_WR_CLK2;
-      `LPC_ST_TAR_WR_CLK2: begin
-        if (waiting_on_write == 1'b0)
-          fsm_next_state <= `LPC_ST_SYNC_WR;
-      end
+      `LPC_ST_TAR_WR_CLK2:    fsm_next_state <= `LPC_ST_SYNC_WR;
       `LPC_ST_SYNC_WR:        fsm_next_state <= `LPC_ST_FINAL_TAR_CLK1;
       `LPC_ST_FINAL_TAR_CLK1: fsm_next_state <= `LPC_ST_FINAL_TAR_CLK2;
       default:                fsm_next_state <= `LPC_ST_IDLE;
@@ -174,15 +174,13 @@ module lpc_periph (
   end
 
   /*
-     * All LAD driving by peripheral should begin at negedge clk_i, because of
-     * that states are shifted backwards by one.
-     */
-  // SYNC - long wait
-  assign lad_bus = (waiting_on_write == 1'b1 ||
-                    waiting_on_read  == 1'b1) ? `LPC_SYNC_LWAIT : 4'bzzzz;
-  // SYNC - ready
-  assign lad_bus = (prev_state_o == `LPC_ST_TAR_WR_CLK2 ||
-                    prev_state_o == `LPC_ST_TAR_RD_CLK2) ? `LPC_SYNC_READY : 4'bzzzz;
+   * All LAD driving by peripheral should begin at negedge clk_i, because of
+   * that states are shifted backwards by one.
+   */
+  // SYNC - either long wait or ready, depending on availability of data
+  assign lad_bus = (prev_state_o == `LPC_ST_TAR_WR_CLK2 || prev_state_o == `LPC_ST_TAR_RD_CLK2) ?
+                   ((waiting_on_write || waiting_on_read) ? `LPC_SYNC_LWAIT : `LPC_SYNC_READY)
+                   : 4'bzzzz;
   // TAR
   assign lad_bus = (prev_state_o == `LPC_ST_SYNC_WR ||
                     prev_state_o == `LPC_ST_DATA_RD_CLK2) ? 4'b1111 : 4'bzzzz;
