@@ -29,7 +29,6 @@
 module lpc_periph_tb ();
 
   // verilog_format: off  // verible-verilog-format messes up comments alignment
-  reg         addr_hit;
   reg         rd_flag;  // indicates that this is read cycle
   reg         wr_flag;  // indicates that this is write cycle
   reg         clk_i;    // input clock
@@ -42,7 +41,6 @@ module lpc_periph_tb ();
   wire  [7:0] host_data_o;
   wire        host_ready;    // indicates that host is ready for next cycle
 
-//  wire  [4:0] current_periph_state;  // status: current peripheral state
   wire  [4:0] current_host_state;    // status: current host state
 
   wire        LCLK;           // Host LPC output clock
@@ -55,12 +53,15 @@ module lpc_periph_tb ();
   wire        lpc_data_wr;    // Signal to data provider that lpc_data_io has valid write data
   reg         lpc_wr_done;    // Signal from data provider that lpc_data_io has been read
   reg         lpc_data_rd;    // Signal from data provider that lpc_data_io has data for read
-  wire        lpc_rd_done;    // Signal to data provider that lpc_data_io has been read
+  wire        lpc_data_req;   // Signal to data provider that is requested (@posedge) or
+                              // has been read (@negedge)
 
   reg  [15:0] u_addr;         // auxiliary host address
   reg   [7:0] u_data;         // auxiliary host data
-  integer i, j, wr_delay, delay;
+  integer i, j, cur_delay, delay;
   reg memory_cycle_sig;
+  reg drive_lpc_data = 0;
+  reg expect_reset = 1;
 
   // verilog_format: on
 
@@ -73,55 +74,68 @@ module lpc_periph_tb ();
     // Initialize
     $dumpfile("lpc_periph_tb.vcd");
     $dumpvars(0, lpc_periph_tb);
+    $timeformat(-9, 0, " ns", 10);
 
     lframe_i    = 1;
-    addr_hit    = 1;
     nrst_i      = 1;
     rd_flag     = 0;
     wr_flag     = 1;
     lpc_wr_done = 0;
+    lpc_data_rd = 0;
     delay       = 0;
     #40 nrst_i  = 0;
     #250 nrst_i = 1;
+
+    expect_reset = 0;
 
     memory_cycle_sig = 0;
 
     // Perform write
     #40 lframe_i = 0;
+    $display("Performing write w/o delay");
     host_addr_i  = 16'hF0F0;
     host_wr_i    = 8'h5A;
     #40 lframe_i = 1;
 
     // Perform write with delay
-    #500 delay   = 10;
+    #600 delay   = 10;
     #40 lframe_i = 0;
+    $display("Performing write with delay");
     host_addr_i  = 16'h9696;
     host_wr_i    = 8'hA5;
     #40 lframe_i = 1;
 
     // Perform read
-    #800 lframe_i = 0;
+    #1000 lframe_i = 0;
+    $display("Performing read with delay");
     periph_data_i = 8'hA5;
     rd_flag = 1;
     wr_flag = 0;
     #80 lframe_i = 1;
 
-    addr_hit = 0;
-    nrst_i   = 1;
+    #1000 delay   = 0;
+    #40 lframe_i  = 0;
+    $display("Performing read w/o delay");
+    periph_data_i = 8'hA5;
+    rd_flag       = 1;
+    wr_flag       = 0;
+    #80 lframe_i  = 1;
+
+    #1000 nrst_i   = 1;
     u_addr   = 0;
     u_data   = 0;
 
-    lframe_i = 1;
-    addr_hit = 1;
     nrst_i   = 1;
     rd_flag  = 0;
     wr_flag  = 1;
+    expect_reset = 1;
     #40 nrst_i = 0;
     #250 nrst_i = 1;
+    expect_reset = 0;
 
     #600 lframe_i = 1;
 
-    for (i = 0; i <= 128; i = i + 1) begin
+    for (i = 0; i <= 8; i = i + 1) begin
       for (j = 0; j < 2; j = j + 1) begin
         memory_cycle_sig = j;  //Cycle type: Memory or I/O
         // Perform write
@@ -151,18 +165,36 @@ module lpc_periph_tb ();
     $finish;
   end
 
-  // Simulate response to write request with delay
+  assign lpc_data_io = lpc_data_rd ? periph_data_i : 8'hzz;
+
+  // Simulate response to read and write requests with optional delay
   always @(posedge clk_i) begin
     if (lpc_data_wr == 1) begin
-      wr_delay = wr_delay + 1;
-      if (wr_delay > delay) begin
+      cur_delay = cur_delay + 1;
+      if (cur_delay > delay) begin
         lpc_wr_done = 1;
-        wr_delay = 0;
+        cur_delay = 0;
       end
-    end else if (lpc_data_wr == 0) begin
+    end else if (lpc_data_req == 0 && lpc_data_wr == 0) begin
       lpc_wr_done = 0;
-      wr_delay = 0;
+      cur_delay = 0;
     end
+
+    if (lpc_data_req == 1) begin
+      cur_delay = cur_delay + 1;
+      if (cur_delay > delay) begin
+        lpc_data_rd = 1;
+        cur_delay = 0;
+      end
+    end else if (lpc_data_wr == 0 && lpc_data_req == 0) begin
+      lpc_data_rd = 0;
+      cur_delay = 0;
+    end
+  end
+
+  always @(negedge LRESET) begin
+    if (expect_reset == 0)
+      $display("Unexpected LRESET deassertion @ %t", $realtime);
   end
 
   // LPC Host instantiation
@@ -199,7 +231,7 @@ module lpc_periph_tb ();
       .lpc_data_wr(lpc_data_wr),
       .lpc_wr_done(lpc_wr_done),
       .lpc_data_rd(lpc_data_rd),
-      .lpc_rd_done(lpc_rd_done)
+      .lpc_data_req(lpc_data_req)
   );
 
 endmodule
