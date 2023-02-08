@@ -156,7 +156,6 @@ module lpc_host (
       fsm_host_state = `LPC_ST_SYNC_RD;
     end else if (fsm_host_state == `LPC_ST_SYNC_RD) begin
       ctrl_data_o[3:0] = LPC_LAD;
-      fsm_host_state   = `LPC_ST_DATA_RD_CLK1;
       if (lad_reg == 4'b0000) fsm_host_state = `LPC_ST_DATA_RD_CLK1;
       else if ((lad_reg != 4'b0101) && (lad_reg != 4'b0110)) begin
         LPC_LRESET = 0;
