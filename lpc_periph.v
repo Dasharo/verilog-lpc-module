@@ -38,7 +38,7 @@ module lpc_periph (
     lpc_data_wr,
     lpc_wr_done,
     lpc_data_rd,
-    lpc_rd_done
+    lpc_data_req
 );
   // verilog_format: off  // verible-verilog-format messes up comments alignment
   // LPC interface
@@ -53,7 +53,8 @@ module lpc_periph (
   output wire        lpc_data_wr;  // Signal to data provider that lpc_data_io has valid write data
   input  wire        lpc_wr_done;  // Signal from data provider that lpc_data_io has been read
   input  wire        lpc_data_rd;  // Signal from data provider that lpc_data_io has data for read
-  output wire        lpc_rd_done;  // Signal to data provider that lpc_data_io has been read
+  output wire        lpc_data_req; // Signal to data provider that is requested (@posedge) or
+                                   // has been read (@negedge)
 
   // Internal signals
   reg [ 4:0] prev_state_o;         // Previous peripheral state (FSM)
@@ -66,11 +67,6 @@ module lpc_periph (
 
   // verilog_format: on
 
-  always @(posedge lpc_wr_done) begin
-    driving_data     <= 1'b0;
-    waiting_on_write <= 1'b0;
-  end
-
   always @(negedge clk_i or negedge nrst_i or posedge lframe_i) begin
     if (~nrst_i) begin
       prev_state_o     <= `LPC_ST_IDLE;
@@ -80,13 +76,39 @@ module lpc_periph (
       // TODO: clear everything, stop driving LAD
     end else begin
       case (fsm_next_state)
+        `LPC_ST_TAR_RD_CLK2: begin
+          // Avoid sync wait if it isn't required
+          if (lpc_data_rd == 1'b1) begin
+            lpc_data_reg = lpc_data_io;
+            waiting_on_read  <= 1'b0;
+          end
+          prev_state_o <= fsm_next_state;
+        end
+        `LPC_ST_SYNC_RD: begin
+          if (lpc_data_rd == 1'b1) begin
+            lpc_data_reg = lpc_data_io;
+            waiting_on_read  <= 1'b0;
+          end
+          if (waiting_on_read == 1'b0) prev_state_o <= fsm_next_state;
+        end
         `LPC_ST_DATA_WR_CLK2: begin
           driving_data <= 1'b1;
           prev_state_o <= fsm_next_state;
         end
+        `LPC_ST_TAR_WR_CLK2: begin
+          // Avoid sync wait if it isn't required
+          if (lpc_wr_done == 1'b1) begin
+            driving_data     <= 1'b0;
+            waiting_on_write <= 1'b0;
+          end
+          prev_state_o <= fsm_next_state;
+        end
         `LPC_ST_SYNC_WR: begin
-          if (waiting_on_write == 1'b0)
-            prev_state_o <= fsm_next_state;
+          if (lpc_wr_done == 1'b1) begin
+            driving_data     <= 1'b0;
+            waiting_on_write <= 1'b0;
+          end
+          if (waiting_on_write == 1'b0) prev_state_o <= fsm_next_state;
         end
         default: prev_state_o <= fsm_next_state;
       endcase
@@ -126,12 +148,13 @@ module lpc_periph (
         lpc_addr_reg[3:0] <= lad_bus;
         fsm_next_state    <= `LPC_ST_ADDR_RD_CLK4;
       end
-      `LPC_ST_ADDR_RD_CLK4:   fsm_next_state <= `LPC_ST_TAR_RD_CLK1;
+      `LPC_ST_ADDR_RD_CLK4: begin
+        waiting_on_read <= 1'b1;
+        fsm_next_state  <= `LPC_ST_TAR_RD_CLK1;
+      end
       `LPC_ST_TAR_RD_CLK1:    fsm_next_state <= `LPC_ST_TAR_RD_CLK2;
       `LPC_ST_TAR_RD_CLK2:    fsm_next_state <= `LPC_ST_SYNC_RD;
-      `LPC_ST_SYNC_RD: begin
-        fsm_next_state    <= `LPC_ST_DATA_RD_CLK1;
-      end
+      `LPC_ST_SYNC_RD:        fsm_next_state <= `LPC_ST_DATA_RD_CLK1;
       `LPC_ST_DATA_RD_CLK1: begin
         fsm_next_state    <= `LPC_ST_DATA_RD_CLK2;
       end
@@ -184,12 +207,11 @@ module lpc_periph (
   // TAR
   assign lad_bus = (prev_state_o == `LPC_ST_SYNC_WR ||
                     prev_state_o == `LPC_ST_DATA_RD_CLK2) ? 4'b1111 : 4'bzzzz;
-  assign lad_bus = (prev_state_o == `LPC_ST_SYNC_RD) ? lpc_data_io[3:0] : 4'bzzzz;
-  assign lad_bus = (prev_state_o == `LPC_ST_DATA_RD_CLK1) ? lpc_data_io[7:4] : 4'bzzzz;
+  assign lad_bus = (prev_state_o == `LPC_ST_SYNC_RD) ? lpc_data_reg[3:0] : 4'bzzzz;
+  assign lad_bus = (prev_state_o == `LPC_ST_DATA_RD_CLK1) ? lpc_data_reg[7:4] : 4'bzzzz;
 
-  assign lpc_addr_o = lpc_addr_reg;
-
-  assign lpc_data_io = (driving_data == 1'b1) ? lpc_data_reg : 8'hzz;
-
-  assign lpc_data_wr = waiting_on_write;
+  assign lpc_addr_o   = lpc_addr_reg;
+  assign lpc_data_io  = (driving_data == 1'b1) ? lpc_data_reg : 8'hzz;
+  assign lpc_data_wr  = waiting_on_write;
+  assign lpc_data_req = waiting_on_read;
 endmodule
