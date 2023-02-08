@@ -191,7 +191,7 @@ module lpc_periph (
       `LPC_ST_TAR_WR_CLK1:    fsm_next_state <= `LPC_ST_TAR_WR_CLK2;
       `LPC_ST_TAR_WR_CLK2:    fsm_next_state <= `LPC_ST_SYNC_WR;
       `LPC_ST_SYNC_WR:        fsm_next_state <= `LPC_ST_FINAL_TAR_CLK1;
-      `LPC_ST_FINAL_TAR_CLK1: fsm_next_state <= `LPC_ST_FINAL_TAR_CLK2;
+      // `LPC_ST_FINAL_TAR_CLK1 goes to idle immediately
       default:                fsm_next_state <= `LPC_ST_IDLE;
     endcase
   end
