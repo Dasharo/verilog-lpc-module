@@ -95,7 +95,8 @@ module lpc_periph_tb ();
       end
       @(posedge LCLK) if (LAD !== 4'hz)       // TAR2
         $display("### LAD driven on TAR2 @ %t", $realtime);
-      @(negedge LCLK);
+      // Task should end on negedge, but because it also starts on negedge we end after posedge
+      // here to make back-to-back invocations possible
     end
   endtask
 
@@ -140,7 +141,7 @@ module lpc_periph_tb ();
           LRESET == 1)
         $display("### Unexpected LAD on DATA2 (%b) @ %t", LAD, $realtime);
       if (LRESET == 0 && LAD !== 4'hz)
-        $display("### LAD driven on TAR1 during reset (%b) @ %t", LAD, $realtime);
+        $display("### LAD driven on DATA2 during reset (%b) @ %t", LAD, $realtime);
       @(posedge LCLK) if (LAD !== 4'hF) begin // TAR1
         if (LRESET == 0 && LAD !== 4'hz)
           $display("### LAD driven on TAR1 during reset (%b) @ %t", LAD, $realtime);
@@ -149,7 +150,8 @@ module lpc_periph_tb ();
       end
       @(posedge LCLK) if (LAD !== 4'hz)       // TAR2
         $display("### LAD driven on TAR2 @ %t", $realtime);
-      @(negedge LCLK);
+      // Task should end on negedge, but because it also starts on negedge we end after posedge
+      // here to make back-to-back invocations possible
     end
   endtask
 
