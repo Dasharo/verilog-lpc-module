@@ -85,6 +85,7 @@ module lpc_periph (
           prev_state_o <= fsm_next_state;
         end
         `LPC_ST_SYNC_RD: begin
+          // FIXME: testbench shows x's in LAD exactly at this point, maybe use Gray codes for FSM?
           if (lpc_data_rd == 1'b1) begin
             lpc_data_reg = lpc_data_io;
             waiting_on_read  <= 1'b0;

@@ -26,6 +26,8 @@
 
 `timescale 1 ns / 1 ps
 
+`include "lpc_defines.v"
+
 module lpc_periph_tb ();
 
   // verilog_format: off  // verible-verilog-format messes up comments alignment
@@ -45,11 +47,13 @@ module lpc_periph_tb ();
   wire        lpc_data_req;   // Signal to data provider that is requested (@posedge) or
                               // has been read (@negedge)
 
-  integer cur_delay, delay;
+  integer cur_delay, delay, i;
   reg   [3:0] LAD_reg = 4'h0;
   reg drive_lpc_data = 0;
   reg expect_reset = 1;
   reg drive_lad = 0;
+  // TPM read/write w/o delay takes 13 clock cycles. Add 1 for final interval, sub 1 for TAR.
+  parameter timeout = 13;
 
   // verilog_format: on
 
@@ -58,21 +62,40 @@ module lpc_periph_tb ();
       @(negedge LCLK);
       drive_lad = 1;
       LFRAME = 0;
-      LAD_reg = 4'h5;             // START
-      #40 LFRAME = 1;
-      LAD_reg = 4'h2;             // CYCTYPE + DIR
-      #40 LAD_reg = addr[15:12];  // ADDR
-      #40 LAD_reg = addr[11:8];
-      #40 LAD_reg = addr[7:4];
-      #40 LAD_reg = addr[3:0];
-      #40 LAD_reg = data[7:4];    // DATA
-      #40 LAD_reg = data[3:0];
-      #40 LAD_reg = 4'hF;         // TAR
-      #40 drive_lad = 0;
-      #40;                        // SYNC
-      #20 @(posedge LCLK && LAD == 4'h0);
-      @(negedge LCLK);            // TAR
-      #80;                        // 2 cycles - from start of TAR1 to end of TAR2
+      LAD_reg = `LPC_START;                   // START
+      @(negedge LCLK) LFRAME = 1;
+      LAD_reg = 4'h2;                         // CYCTYPE + DIR
+      @(negedge LCLK) LAD_reg = addr[15:12];  // ADDR
+      @(negedge LCLK) LAD_reg = addr[11:8];
+      @(negedge LCLK) LAD_reg = addr[7:4];
+      @(negedge LCLK) LAD_reg = addr[3:0];
+      @(negedge LCLK) LAD_reg = data[7:4];    // DATA
+      @(negedge LCLK) LAD_reg = data[3:0];
+      @(negedge LCLK) LAD_reg = 4'hF;         // TAR1
+      @(negedge LCLK) drive_lad = 0;
+      @(posedge LCLK) if (LAD !== 4'hz)       // TAR2
+        $display("### LAD driven on TAR2 @ %t", $realtime);
+      fork : ws                               // SYNC
+        begin
+          // Forked threads would hit previous posedge, skip it manually
+          @(negedge LCLK);
+          @(posedge LCLK && LRESET == 1 && LAD !== `LPC_SYNC_READY && LAD !== `LPC_SYNC_LWAIT)
+            $display("### Unexpected LAD on SYNC (%b) @ %t", LAD, $realtime);
+        end
+        begin
+          @(negedge LCLK);
+          @(posedge LCLK && LAD === `LPC_SYNC_READY && LRESET == 1) disable ws;
+        end
+      join
+      @(posedge LCLK) if (LAD !== 4'hF) begin // TAR1
+        if (LRESET == 0 && LAD !== 4'hz)
+          $display("### LAD driven on TAR1 during reset (%b) @ %t", LAD, $realtime);
+        else if (LRESET == 1)
+          $display("### LAD not driven on TAR1 @ %t", $realtime);
+      end
+      @(posedge LCLK) if (LAD !== 4'hz)       // TAR2
+        $display("### LAD driven on TAR2 @ %t", $realtime);
+      @(negedge LCLK);
     end
   endtask
 
@@ -81,24 +104,55 @@ module lpc_periph_tb ();
       @(negedge LCLK);
       drive_lad = 1;
       LFRAME = 0;
-      LAD_reg = 4'h5;             // START
-      #40 LFRAME = 1;
-      LAD_reg = 4'h0;             // CYCTYPE + DIR
-      #40 LAD_reg = addr[15:12];  // ADDR
-      #40 LAD_reg = addr[11:8];
-      #40 LAD_reg = addr[7:4];
-      #40 LAD_reg = addr[3:0];
-      #40 LAD_reg = 4'hF;         // TAR
-      #40 drive_lad = 0;
-      #40;                        // SYNC
-      #20 @(posedge LCLK && LAD == 4'h0);
-      #40 data[3:0] = LAD;        // DATA
-      #40 data[7:4] = LAD;
-      #20 @(negedge LCLK);        // TAR
-      #80;
+      LAD_reg = `LPC_START;                   // START
+      @(negedge LCLK) LFRAME = 1;
+      LAD_reg = 4'h0;                         // CYCTYPE + DIR
+      @(negedge LCLK) LAD_reg = addr[15:12];  // ADDR
+      @(negedge LCLK) LAD_reg = addr[11:8];
+      @(negedge LCLK) LAD_reg = addr[7:4];
+      @(negedge LCLK) LAD_reg = addr[3:0];
+      @(negedge LCLK) LAD_reg = 4'hF;         // TAR1
+      @(negedge LCLK) drive_lad = 0;
+      @(posedge LCLK) if (LAD !== 4'hz)       // TAR2
+        $display("### LAD driven on TAR2 @ %t", $realtime);
+      fork : ws                               // SYNC
+        begin
+          // Forked threads would hit previous posedge, skip it manually
+          @(negedge LCLK);
+          @(posedge LCLK && LRESET == 1 && LAD !== `LPC_SYNC_READY && LAD !== `LPC_SYNC_LWAIT)
+            $display("### Unexpected LAD on SYNC (%b) @ %t", LAD, $realtime);
+        end
+        begin
+          @(negedge LCLK);
+          @(posedge LCLK && LAD === `LPC_SYNC_READY && LRESET == 1) disable ws;
+        end
+      join
+      @(posedge LCLK) data[3:0] = LAD;        // DATA1
+      if ((LAD[0] === 1'bx || LAD[1] === 1'bx || LAD[2] === 1'bx || LAD[3] === 1'bx ||
+           LAD[0] === 1'bz || LAD[1] === 1'bz || LAD[2] === 1'bz || LAD[3] === 1'bz) &&
+          LRESET == 1)
+        $display("### Unexpected LAD on DATA1 (%b) @ %t", LAD, $realtime);
+      if (LRESET == 0 && LAD !== 4'hz)
+        $display("### LAD driven on DATA1 during reset (%b) @ %t", LAD, $realtime);
+      @(posedge LCLK) data[7:4] = LAD;
+      if ((LAD[0] === 1'bx || LAD[1] === 1'bx || LAD[2] === 1'bx || LAD[3] === 1'bx ||
+           LAD[0] === 1'bz || LAD[1] === 1'bz || LAD[2] === 1'bz || LAD[3] === 1'bz) &&
+          LRESET == 1)
+        $display("### Unexpected LAD on DATA2 (%b) @ %t", LAD, $realtime);
+      if (LRESET == 0 && LAD !== 4'hz)
+        $display("### LAD driven on TAR1 during reset (%b) @ %t", LAD, $realtime);
+      @(posedge LCLK) if (LAD !== 4'hF) begin // TAR1
+        if (LRESET == 0 && LAD !== 4'hz)
+          $display("### LAD driven on TAR1 during reset (%b) @ %t", LAD, $realtime);
+        else if (LRESET == 1)
+          $display("### LAD not driven on TAR1 @ %t", $realtime);
+      end
+      @(posedge LCLK) if (LAD !== 4'hz)       // TAR2
+        $display("### LAD driven on TAR2 @ %t", $realtime);
+      @(negedge LCLK);
     end
   endtask
-    
+
   initial begin
     LCLK = 1'b1;
     forever #20 LCLK = ~LCLK;
@@ -123,7 +177,7 @@ module lpc_periph_tb ();
     expected_data = 8'h3C;
     tpm_write (16'hC44C, expected_data);
     if (periph_data != expected_data)
-      $display("Write failed, expected %2h, got %2h", expected_data, periph_data);
+      $display("### Write failed, expected %2h, got %2h", expected_data, periph_data);
 
     // Perform write with delay
     delay = 10;
@@ -131,14 +185,14 @@ module lpc_periph_tb ();
     $display("Performing TPM write with delay");
     tpm_write (16'h9C39, expected_data);
     if (periph_data != expected_data)
-      $display("Write failed, expected %2h, got %2h", expected_data, periph_data);
+      $display("### Write failed, expected %2h, got %2h", expected_data, periph_data);
 
     // Perform read with delay
     periph_data = 8'hA5;
     $display("Performing TPM read with delay");
     tpm_read (16'hFF00, expected_data);
     if (periph_data != expected_data)
-      $display("Read failed, expected %2h, got %2h", periph_data, expected_data);
+      $display("### Read failed, expected %2h, got %2h", periph_data, expected_data);
 
     // Perform read without delay
     delay = 0;
@@ -146,13 +200,105 @@ module lpc_periph_tb ();
     $display("Performing TPM read w/o delay");
     tpm_read (16'hFF00, expected_data);
     if (periph_data != expected_data)
-      $display("Read failed, expected %2h, got %2h", periph_data, expected_data);
+      $display("### Read failed, expected %2h, got %2h", periph_data, expected_data);
 
-    // TODO: test reset signal
+    #1000
+
+    // Test reset signals at various points of communication
+    expect_reset = 1;
+    $display("Testing reset behaviour - TPM write w/o delay");
+    delay = 0;
+    for (i = 0; i <= (timeout + delay) * 40; i = i + 19) begin
+      expected_data = 8'h3C;
+      fork : rw
+        begin
+          tpm_write (16'hFFFF, expected_data);
+          $display("Write completed but it shouldn't @ %t", $realtime);
+          disable rw;
+        end
+        begin
+          #i LRESET = 0;
+          #(((timeout + delay) * 40) - i);
+          disable rw;
+        end
+      join
+      LRESET = 1;
+      #40;
+    end
+
+    #1000
+
+    $display("Testing reset behaviour - TPM read w/o delay");
+    delay = 0;
+    for (i = 0; i <= (timeout + delay) * 40; i = i + 19) begin
+      periph_data = 8'hA3;
+      fork : rr
+        begin
+          tpm_read (16'h1423, expected_data);
+          $display("Write completed but it shouldn't @ %t", $realtime);
+          disable rr;
+        end
+        begin
+          #i LRESET = 0;
+          #(((timeout + delay) * 40) - i);
+          disable rr;
+        end
+      join
+      LRESET = 1;
+      #40;
+    end
+
+    #1000
+
+    $display("Testing reset behaviour - TPM write with delay");
+    delay = 5;
+    for (i = 0; i <= (timeout + delay) * 40; i = i + 19) begin
+      expected_data = 8'h3C;
+      fork : rwd
+        begin
+          tpm_write (16'hFFFF, expected_data);
+          $display("Write completed but it shouldn't @ %t", $realtime);
+          disable rwd;
+        end
+        begin
+          #i LRESET = 0;
+          #(((timeout + delay) * 40) - i);
+          disable rwd;
+        end
+      join
+      LRESET = 1;
+      #40;
+    end
+
+    #1000
+
+    $display("Testing reset behaviour - TPM read with delay");
+    delay = 5;
+    for (i = 0; i <= (timeout + delay) * 40; i = i + 19) begin
+      periph_data = 8'hA3;
+      fork : rrd
+        begin
+          tpm_read (16'h1423, expected_data);
+          $display("Write completed but it shouldn't @ %t", $realtime);
+          disable rrd;
+        end
+        begin
+          #i LRESET = 0;
+          #(((timeout + delay) * 40) - i);
+          disable rrd;
+        end
+      join
+      LRESET = 1;
+      #40;
+    end
+
+    expect_reset = 0;
+
     // TODO: test other cycle types and start nibbles
+
     // TODO: test extended LFRAME# timings (with changing LAD)
 
-    #100;
+    #1000;
     //------------------------------
     $stop;
     $finish;
@@ -187,9 +333,24 @@ module lpc_periph_tb ();
     end
   end
 
+  // Checks for unexpected states
   always @(negedge LRESET) begin
     if (expect_reset == 0)
-      $display("Unexpected LRESET deassertion @ %t", $realtime);
+      $display("### Unexpected LRESET deassertion @ %t", $realtime);
+  end
+
+  // Erroneous states may be reported multiple times with @*, but ideally there shouldn't be any
+  always @* begin
+    // Skip initial state
+    if ($realtime != 0) begin
+      // Each bit must be tested individually, otherwise states like x1x1 wouldn't be caught
+      if (LAD[0] === 1'bx || LAD[1] === 1'bx || LAD[2] === 1'bx || LAD[3] === 1'bx)
+        $display("### Multiple LAD drivers (%b) @ %t", LAD, $realtime);
+      if (lpc_data_io[0] === 1'bx || lpc_data_io[1] === 1'bx || lpc_data_io[2] === 1'bx ||
+          lpc_data_io[3] === 1'bx || lpc_data_io[4] === 1'bx || lpc_data_io[5] === 1'bx ||
+          lpc_data_io[6] === 1'bx || lpc_data_io[7] === 1'bx)
+        $display("### Multiple lpc_data_io drivers (%b) @ %t", lpc_data_io, $realtime);
+    end
   end
 
   // LPC Peripheral instantiation
