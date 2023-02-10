@@ -57,14 +57,20 @@ module lpc_periph_tb ();
 
   // verilog_format: on
 
-  task tpm_write (input [15:0] addr, input [7:0] data);
+  task lpc_write (input [3:0] start, input [3:0] cycdir, input [15:0] addr, input [7:0] data);
+    reg rsp_expected;
     begin
+      if ((start === `LPC_START) && (cycdir === `LPC_IO_WRITE))
+        rsp_expected = 1;
+      else
+        rsp_expected = 0;
+
       @(negedge LCLK);
       drive_lad = 1;
       LFRAME = 0;
-      LAD_reg = `LPC_START;                   // START
+      LAD_reg = start;                        // START
       @(negedge LCLK) LFRAME = 1;
-      LAD_reg = 4'h2;                         // CYCTYPE + DIR
+      LAD_reg = cycdir;                       // CYCTYPE + DIR
       @(negedge LCLK) LAD_reg = addr[15:12];  // ADDR
       @(negedge LCLK) LAD_reg = addr[11:8];
       @(negedge LCLK) LAD_reg = addr[7:4];
@@ -75,24 +81,33 @@ module lpc_periph_tb ();
       @(negedge LCLK) drive_lad = 0;
       @(posedge LCLK) if (LAD !== 4'hz)       // TAR2
         $display("### LAD driven on TAR2 @ %t", $realtime);
+      // Forked threads would hit previous posedge, skip it manually
+      @(negedge LCLK);
       fork : ws                               // SYNC
         begin
-          // Forked threads would hit previous posedge, skip it manually
-          @(negedge LCLK);
-          @(posedge LCLK && LRESET == 1 && LAD !== `LPC_SYNC_READY && LAD !== `LPC_SYNC_LWAIT)
-            $display("### Unexpected LAD on SYNC (%b) @ %t", LAD, $realtime);
+          @(posedge LCLK) begin
+            if (LRESET && rsp_expected) begin
+              if (LAD !== `LPC_SYNC_READY && LAD !== `LPC_SYNC_LWAIT)
+                $display("### Unexpected LAD on SYNC (%b) @ %t", LAD, $realtime);
+            end else if (LRESET === 0 && LAD !== 4'hz)
+              $display("### LAD driven during reset on SYNC (%b) @ %t", LAD, $realtime);
+            else if (rsp_expected == 0 && LAD !== 4'hz)
+              $display("### LAD driven for bad START/CYCDIR on SYNC (%b) @ %t", LAD, $realtime);
+          end
         end
         begin
-          @(negedge LCLK);
-          @(posedge LCLK && LAD === `LPC_SYNC_READY && LRESET == 1) disable ws;
+          @(posedge LCLK && LAD === `LPC_SYNC_READY && LRESET && rsp_expected) disable ws;
         end
       join
-      @(posedge LCLK) if (LAD !== 4'hF) begin // TAR1
-        if (LRESET == 0 && LAD !== 4'hz)
-          $display("### LAD driven on TAR1 during reset (%b) @ %t", LAD, $realtime);
-        else if (LRESET == 1)
-          $display("### LAD not driven on TAR1 @ %t", $realtime);
-      end
+      @(posedge LCLK)                         // TAR1
+      if (LRESET == 0 && LAD !== 4'hz)
+        $display("### LAD driven on TAR1 during reset (%b) @ %t", LAD, $realtime);
+      else if (rsp_expected == 0 && LAD !== 4'hz)
+        $display("### LAD driven on TAR1 for bad START/CYCDIR (%b) @ %t", LAD, $realtime);
+      else if (LRESET && rsp_expected && LAD === 4'hz)
+        $display("### LAD not driven on TAR1 @ %t", $realtime);
+      else if (LRESET && rsp_expected && LAD !== 4'hF)
+        $display("### Unexpected LAD on TAR1 (%b) @ %t", LAD, $realtime);
       @(posedge LCLK) if (LAD !== 4'hz)       // TAR2
         $display("### LAD driven on TAR2 @ %t", $realtime);
       // Task should end on negedge, but because it also starts on negedge we end after posedge
@@ -100,14 +115,20 @@ module lpc_periph_tb ();
     end
   endtask
 
-  task tpm_read (input [15:0] addr, output [7:0] data);
+  task lpc_read (input [3:0] start, input [3:0] cycdir, input [15:0] addr, output [7:0] data);
+    reg rsp_expected;
     begin
+      if ((start === `LPC_START) && (cycdir === `LPC_IO_READ))
+        rsp_expected = 1;
+      else
+        rsp_expected = 0;
+
       @(negedge LCLK);
       drive_lad = 1;
       LFRAME = 0;
-      LAD_reg = `LPC_START;                   // START
+      LAD_reg = start;                        // START
       @(negedge LCLK) LFRAME = 1;
-      LAD_reg = 4'h0;                         // CYCTYPE + DIR
+      LAD_reg = cycdir;                       // CYCTYPE + DIR
       @(negedge LCLK) LAD_reg = addr[15:12];  // ADDR
       @(negedge LCLK) LAD_reg = addr[11:8];
       @(negedge LCLK) LAD_reg = addr[7:4];
@@ -116,43 +137,64 @@ module lpc_periph_tb ();
       @(negedge LCLK) drive_lad = 0;
       @(posedge LCLK) if (LAD !== 4'hz)       // TAR2
         $display("### LAD driven on TAR2 @ %t", $realtime);
-      fork : ws                               // SYNC
+      // Forked threads would hit previous posedge, skip it manually
+      @(negedge LCLK);
+      fork : rs                               // SYNC
         begin
-          // Forked threads would hit previous posedge, skip it manually
-          @(negedge LCLK);
-          @(posedge LCLK && LRESET == 1 && LAD !== `LPC_SYNC_READY && LAD !== `LPC_SYNC_LWAIT)
-            $display("### Unexpected LAD on SYNC (%b) @ %t", LAD, $realtime);
+          @(posedge LCLK) begin
+            if (LRESET && rsp_expected) begin
+              if (LAD !== `LPC_SYNC_READY && LAD !== `LPC_SYNC_LWAIT)
+                $display("### Unexpected LAD on SYNC (%b) @ %t", LAD, $realtime);
+            end else if (LRESET === 0 && LAD !== 4'hz)
+              $display("### LAD driven during reset on SYNC (%b) @ %t", LAD, $realtime);
+            else if (rsp_expected == 0 && LAD !== 4'hz)
+              $display("### LAD driven for bad START/CYCDIR on SYNC (%b) @ %t", LAD, $realtime);
+          end
         end
         begin
-          @(negedge LCLK);
-          @(posedge LCLK && LAD === `LPC_SYNC_READY && LRESET == 1) disable ws;
+          @(posedge LCLK && LAD === `LPC_SYNC_READY && LRESET && rsp_expected) disable rs;
         end
       join
       @(posedge LCLK) data[3:0] = LAD;        // DATA1
       if ((LAD[0] === 1'bx || LAD[1] === 1'bx || LAD[2] === 1'bx || LAD[3] === 1'bx ||
            LAD[0] === 1'bz || LAD[1] === 1'bz || LAD[2] === 1'bz || LAD[3] === 1'bz) &&
-          LRESET == 1)
+          LRESET && rsp_expected)
         $display("### Unexpected LAD on DATA1 (%b) @ %t", LAD, $realtime);
-      if (LRESET == 0 && LAD !== 4'hz)
+      else if (LRESET == 0 && LAD !== 4'hz)
         $display("### LAD driven on DATA1 during reset (%b) @ %t", LAD, $realtime);
+      else if (rsp_expected == 0 && LAD !== 4'hz)
+        $display("### LAD driven on DATA1 for bad START/CYCDIR (%b) @ %t", LAD, $realtime);
       @(posedge LCLK) data[7:4] = LAD;
       if ((LAD[0] === 1'bx || LAD[1] === 1'bx || LAD[2] === 1'bx || LAD[3] === 1'bx ||
            LAD[0] === 1'bz || LAD[1] === 1'bz || LAD[2] === 1'bz || LAD[3] === 1'bz) &&
-          LRESET == 1)
+          LRESET && rsp_expected)
         $display("### Unexpected LAD on DATA2 (%b) @ %t", LAD, $realtime);
-      if (LRESET == 0 && LAD !== 4'hz)
+      else if (LRESET == 0 && LAD !== 4'hz)
         $display("### LAD driven on DATA2 during reset (%b) @ %t", LAD, $realtime);
-      @(posedge LCLK) if (LAD !== 4'hF) begin // TAR1
-        if (LRESET == 0 && LAD !== 4'hz)
-          $display("### LAD driven on TAR1 during reset (%b) @ %t", LAD, $realtime);
-        else if (LRESET == 1)
-          $display("### LAD not driven on TAR1 @ %t", $realtime);
-      end
+      else if (rsp_expected == 0 && LAD !== 4'hz)
+        $display("### LAD driven on DATA2 for bad START/CYCDIR (%b) @ %t", LAD, $realtime);
+      @(posedge LCLK)                         // TAR1
+      if (LRESET == 0 && LAD !== 4'hz)
+        $display("### LAD driven on TAR1 during reset (%b) @ %t", LAD, $realtime);
+      else if (rsp_expected == 0 && LAD !== 4'hz)
+        $display("### LAD driven on TAR1 for bad START/CYCDIR (%b) @ %t", LAD, $realtime);
+      else if (LRESET && rsp_expected && LAD === 4'hz)
+        $display("### LAD not driven on TAR1 @ %t", $realtime);
+      else if (LRESET && rsp_expected && LAD !== 4'hF)
+        $display("### Unexpected LAD on TAR1 (%b) @ %t", LAD, $realtime);
       @(posedge LCLK) if (LAD !== 4'hz)       // TAR2
         $display("### LAD driven on TAR2 @ %t", $realtime);
       // Task should end on negedge, but because it also starts on negedge we end after posedge
       // here to make back-to-back invocations possible
     end
+  endtask
+
+  task tpm_write (input [15:0] addr, input [7:0] data);
+    lpc_write (`LPC_START, `LPC_IO_WRITE, addr, data);
+  endtask
+
+  task tpm_read (input [15:0] addr, output [7:0] data);
+    lpc_read (`LPC_START, `LPC_IO_READ, addr, data);
   endtask
 
   initial begin
