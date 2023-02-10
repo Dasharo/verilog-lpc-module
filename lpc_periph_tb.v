@@ -237,7 +237,7 @@ module lpc_periph_tb ();
       fork : rr
         begin
           tpm_read (16'h1423, expected_data);
-          $display("Write completed but it shouldn't @ %t", $realtime);
+          $display("Read completed but it shouldn't @ %t", $realtime);
           disable rr;
         end
         begin
@@ -281,7 +281,7 @@ module lpc_periph_tb ();
       fork : rrd
         begin
           tpm_read (16'h1423, expected_data);
-          $display("Write completed but it shouldn't @ %t", $realtime);
+          $display("Read completed but it shouldn't @ %t", $realtime);
           disable rrd;
         end
         begin
@@ -341,13 +341,26 @@ module lpc_periph_tb ();
       $display("### Unexpected LRESET deassertion @ %t", $realtime);
   end
 
-  // Erroneous states may be reported multiple times with @*, but ideally there shouldn't be any
-  always @* begin
+  reg [3:0] old_LAD;
+  realtime t;
+
+  always @(LAD, lpc_data_io) begin
     // Skip initial state
     if ($realtime != 0) begin
       // Each bit must be tested individually, otherwise states like x1x1 wouldn't be caught
-      if (LAD[0] === 1'bx || LAD[1] === 1'bx || LAD[2] === 1'bx || LAD[3] === 1'bx)
-        $display("### Multiple LAD drivers (%b) @ %t", LAD, $realtime);
+      if (LAD[0] === 1'bx || LAD[1] === 1'bx || LAD[2] === 1'bx || LAD[3] === 1'bx) begin
+        // FIXME: when peripheral begins driving DATA1, x's appear on LAD in place of 1's in DATA1.
+        // This doesn't happen on any other transition, even though there are other 0->1 transitions
+        // when LAD is driven by peripheral. $strobe shows proper DATA1. As a workaround for getting
+        // false positives, compare current LAD with next time step - OR of those two should equal
+        // new signal and should not contain any x's, while AND should equal old signal (with x's).
+        old_LAD = LAD;
+        t = $realtime;
+        #1;
+        if (((old_LAD | LAD) !== LAD) || ((old_LAD & LAD) !== old_LAD) ||
+            (LAD[0] === 1'bx || LAD[1] === 1'bx || LAD[2] === 1'bx || LAD[3] === 1'bx))
+          $display("### Multiple LAD drivers (%b) LCLK = %b @ %t", LAD, LCLK, t);
+      end
       if (lpc_data_io[0] === 1'bx || lpc_data_io[1] === 1'bx || lpc_data_io[2] === 1'bx ||
           lpc_data_io[3] === 1'bx || lpc_data_io[4] === 1'bx || lpc_data_io[5] === 1'bx ||
           lpc_data_io[6] === 1'bx || lpc_data_io[7] === 1'bx)
