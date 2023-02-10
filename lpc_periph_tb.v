@@ -89,10 +89,12 @@ module lpc_periph_tb ();
             if (LRESET && rsp_expected) begin
               if (LAD !== `LPC_SYNC_READY && LAD !== `LPC_SYNC_LWAIT)
                 $display("### Unexpected LAD on SYNC (%b) @ %t", LAD, $realtime);
-            end else if (LRESET === 0 && LAD !== 4'hz)
+            end else if (LRESET == 0 && LAD !== 4'hz)
               $display("### LAD driven during reset on SYNC (%b) @ %t", LAD, $realtime);
             else if (rsp_expected == 0 && LAD !== 4'hz)
               $display("### LAD driven for bad START/CYCDIR on SYNC (%b) @ %t", LAD, $realtime);
+            else if (rsp_expected == 0 && LAD === 4'hz)
+              disable ws;
           end
         end
         begin
@@ -145,17 +147,19 @@ module lpc_periph_tb ();
             if (LRESET && rsp_expected) begin
               if (LAD !== `LPC_SYNC_READY && LAD !== `LPC_SYNC_LWAIT)
                 $display("### Unexpected LAD on SYNC (%b) @ %t", LAD, $realtime);
-            end else if (LRESET === 0 && LAD !== 4'hz)
+            end else if (LRESET == 0 && LAD !== 4'hz)
               $display("### LAD driven during reset on SYNC (%b) @ %t", LAD, $realtime);
             else if (rsp_expected == 0 && LAD !== 4'hz)
               $display("### LAD driven for bad START/CYCDIR on SYNC (%b) @ %t", LAD, $realtime);
+            else if (rsp_expected == 0 && LAD === 4'hz)
+              disable rs;
           end
         end
         begin
           @(posedge LCLK && LAD === `LPC_SYNC_READY && LRESET && rsp_expected) disable rs;
         end
       join
-      @(posedge LCLK) data[3:0] = LAD;        // DATA1
+      @(posedge LCLK)                         // DATA1
       if ((LAD[0] === 1'bx || LAD[1] === 1'bx || LAD[2] === 1'bx || LAD[3] === 1'bx ||
            LAD[0] === 1'bz || LAD[1] === 1'bz || LAD[2] === 1'bz || LAD[3] === 1'bz) &&
           LRESET && rsp_expected)
@@ -164,7 +168,8 @@ module lpc_periph_tb ();
         $display("### LAD driven on DATA1 during reset (%b) @ %t", LAD, $realtime);
       else if (rsp_expected == 0 && LAD !== 4'hz)
         $display("### LAD driven on DATA1 for bad START/CYCDIR (%b) @ %t", LAD, $realtime);
-      @(posedge LCLK) data[7:4] = LAD;
+      else data[3:0] = LAD;
+      @(posedge LCLK)                         // DATA2
       if ((LAD[0] === 1'bx || LAD[1] === 1'bx || LAD[2] === 1'bx || LAD[3] === 1'bx ||
            LAD[0] === 1'bz || LAD[1] === 1'bz || LAD[2] === 1'bz || LAD[3] === 1'bz) &&
           LRESET && rsp_expected)
@@ -173,6 +178,7 @@ module lpc_periph_tb ();
         $display("### LAD driven on DATA2 during reset (%b) @ %t", LAD, $realtime);
       else if (rsp_expected == 0 && LAD !== 4'hz)
         $display("### LAD driven on DATA2 for bad START/CYCDIR (%b) @ %t", LAD, $realtime);
+      else data[7:4] = LAD;
       @(posedge LCLK)                         // TAR1
       if (LRESET == 0 && LAD !== 4'hz)
         $display("### LAD driven on TAR1 during reset (%b) @ %t", LAD, $realtime);
@@ -337,10 +343,56 @@ module lpc_periph_tb ();
     end
 
     expect_reset = 0;
+    delay = 0;
+    #1000
 
-    // TODO: test other cycle types and start nibbles
+    $display("Testing non-TPM transactions");
+
+    periph_data   = 8'h66;
+    expected_data = 8'h99;
+    lpc_read (4'h0, `LPC_IO_READ, 16'hF36C, expected_data);
+    if (periph_data !== 8'h66 || expected_data != 8'hzz)
+      $display("### Non-TPM read returned data");
+    #40;
+
+    periph_data   = 8'hAA;
+    expected_data = 8'hCC;
+    lpc_read (`LPC_START, 4'b0101, 16'hF36C, expected_data);
+    if (periph_data !== 8'hAA || expected_data != 8'hzz)
+      $display("### TPM non-read returned data");
+    #40;
+
+    periph_data   = 8'h33;
+    expected_data = 8'h99;
+    lpc_write (4'h0, `LPC_IO_WRITE, 16'hF36C, expected_data);
+    if (periph_data !== 8'h33)
+      $display("### Non-TPM write finished");
+    #40;
+
+    periph_data   = 8'hAA;
+    expected_data = 8'hCC;
+    lpc_write (`LPC_START, 4'b0110, 16'hF36C, expected_data);
+    if (periph_data !== 8'hAA)
+      $display("### TPM non-write finished");
+    #40;
+
+    periph_data   = 8'h57;
+    expected_data = 8'h75;
+    lpc_read (4'h0, 4'b1000, 16'hF36C, expected_data);
+    if (periph_data !== 8'h57 || expected_data != 8'hzz)
+      $display("### Non-TPM non-read returned data");
+    #40;
+
+    periph_data   = 8'hAA;
+    expected_data = 8'hCC;
+    lpc_write (4'h7, 4'b1110, 16'hF36C, expected_data);
+    if (periph_data !== 8'hAA)
+      $display("### Non-TPM non-write finished");
+    #40;
 
     // TODO: test extended LFRAME# timings (with changing LAD)
+
+    // TODO: abort mechanism
 
     #1000;
     //------------------------------
