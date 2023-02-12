@@ -131,15 +131,15 @@ module lpc_periph_tb ();
   task lpc_write (input [3:0] start, input [3:0] cycdir, input [15:0] addr, input [7:0] data);
     reg rsp_expected;
     begin
-      if ((start === `LPC_START) && (cycdir === `LPC_IO_WRITE))
-        rsp_expected = 1;
-      else
-        rsp_expected = 0;
-
       @(negedge LCLK);
       drive_lad = 1;
       LFRAME = 0;
       LAD_reg = start;                          // START
+      @(posedge LCLK)
+        if ((LAD === `LPC_START) && (cycdir === `LPC_IO_WRITE))
+          rsp_expected = 1;
+        else
+          rsp_expected = 0;
       @(negedge LCLK) LFRAME = 1;
       LAD_reg = cycdir;                         // CYCTYPE + DIR
       lpc_addr (addr);                          // ADDR
@@ -153,15 +153,15 @@ module lpc_periph_tb ();
   task lpc_read (input [3:0] start, input [3:0] cycdir, input [15:0] addr, output [7:0] data);
     reg rsp_expected;
     begin
-      if ((start === `LPC_START) && (cycdir === `LPC_IO_READ))
-        rsp_expected = 1;
-      else
-        rsp_expected = 0;
-
       @(negedge LCLK);
       drive_lad = 1;
       LFRAME = 0;
       LAD_reg = start;                          // START
+      @(posedge LCLK)
+        if ((LAD === `LPC_START) && (cycdir === `LPC_IO_READ))
+          rsp_expected = 1;
+        else
+          rsp_expected = 0;
       @(negedge LCLK) LFRAME = 1;
       LAD_reg = cycdir;                         // CYCTYPE + DIR
       lpc_addr (addr);                          // ADDR
@@ -367,7 +367,249 @@ module lpc_periph_tb ();
       $display("### Non-TPM non-write finished");
     #40;
 
-    // TODO: test extended LFRAME# timings (with changing LAD)
+    $display("Testing extended LFRAME# timings - write");
+
+    // Extended LFRAME# write w/o delay
+    LAD_reg = `LPC_START;
+    drive_lad = 1;
+    LFRAME = 0;
+    expected_data = 8'h81;
+    #100 tpm_write (16'h3461, expected_data);
+    if (periph_data != expected_data)
+      $display("### Write failed, expected %2h, got %2h", expected_data, periph_data);
+
+    #40;
+    // Extended LFRAME# write with delay
+    delay = 17;
+    LAD_reg = `LPC_START;
+    drive_lad = 1;
+    LFRAME = 0;
+    expected_data = 8'h79;
+    #100 tpm_write (16'h4682, expected_data);
+    if (periph_data != expected_data)
+      $display("### Write failed, expected %2h, got %2h", expected_data, periph_data);
+
+    #40;
+    delay = 0;
+    // Extended LFRAME# with changing LAD
+    LAD_reg = `LPC_START;
+    drive_lad = 1;
+    LFRAME = 0;
+    expected_data = 8'h48;
+    #40 LAD_reg = 4'h1;
+    #30 LAD_reg = 4'h3;
+    #50 LAD_reg = 4'h7;
+    #20 LAD_reg = 4'hF;
+    #10 LAD_reg = 4'h3;
+    #15 LAD_reg = 4'h1;
+    tpm_write (16'h3461, expected_data);
+    if (periph_data != expected_data)
+      $display("### Write failed, expected %2h, got %2h", expected_data, periph_data);
+
+    #40;
+    LAD_reg = 4'h1;
+    drive_lad = 1;
+    LFRAME = 0;
+    expected_data = 8'h48;
+    #40 LAD_reg = 4'h1;
+    #30 LAD_reg = 4'h3;
+    #15 LAD_reg = 4'h7;
+    tpm_write (16'h3461, expected_data);
+    if (periph_data != expected_data)
+      $display("### Write failed, expected %2h, got %2h", expected_data, periph_data);
+
+    #40;
+    LAD_reg = 4'h1;
+    drive_lad = 1;
+    LFRAME = 0;
+    expected_data = 8'h94;
+    #40 LAD_reg = 4'h1;
+    #30 LAD_reg = 4'h3;
+    #15 LAD_reg = 4'h7;
+    lpc_write (4'hz, `LPC_IO_WRITE, 16'h5474, expected_data);
+    if (periph_data == expected_data)
+      $display("### Write completed without valid START");
+
+    #40;
+    LAD_reg = 4'h1;
+    drive_lad = 1;
+    LFRAME = 0;
+    expected_data = 8'h94;
+    #40 LAD_reg = 4'h1;
+    #30 LAD_reg = 4'h3;
+    #15 LAD_reg = 4'h7;
+    lpc_write (4'h1, `LPC_IO_WRITE, 16'h7428, expected_data);
+    if (periph_data == expected_data)
+      $display("### Write completed without valid START");
+
+    #40;
+    LAD_reg = 4'h1;
+    drive_lad = 1;
+    LFRAME = 0;
+    expected_data = 8'h94;
+    #40 LAD_reg = 4'h1;
+    #30 LAD_reg = `LPC_START;
+    #55 LAD_reg = 4'h7;
+    lpc_write (4'h1, `LPC_IO_WRITE, 16'h5974, expected_data);
+    if (periph_data == expected_data)
+      $display("### Write completed without valid START");
+
+    // Short but proper LPC_START
+    fork
+      begin
+        @(negedge LCLK);
+        #15 LAD_reg = `LPC_START;
+        #10 LAD_reg = 4'h7;
+      end
+      begin
+        expected_data = 8'h17;
+        lpc_write (4'hz, `LPC_IO_WRITE, 16'h7413, expected_data);
+        if (periph_data != expected_data)
+          $display("### Write failed, expected %2h, got %2h", expected_data, periph_data);
+      end
+    join
+
+    // Bad START surrounded by proper LPC_STARTs
+    fork
+      begin
+        @(negedge LCLK);
+        #1  LAD_reg = `LPC_START;
+        #14 LAD_reg = 4'h3;
+        #10 LAD_reg = `LPC_START;
+      end
+      begin
+        expected_data = 8'h59;
+        lpc_write (4'hz, `LPC_IO_WRITE, 16'h7413, expected_data);
+        if (periph_data == expected_data)
+          $display("### Write completed without valid START");
+      end
+    join
+
+    $display("Testing extended LFRAME# timings - read");
+
+    #40;
+    // Extended LFRAME# read with delay
+    LAD_reg = `LPC_START;
+    drive_lad = 1;
+    LFRAME = 0;
+    periph_data = 8'h45;
+    #100 tpm_read (16'h1337, expected_data);
+    if (periph_data != expected_data)
+      $display("### Read failed, expected %2h, got %2h", periph_data, expected_data);
+
+    #40;
+    // Extended LFRAME# read w/o delay
+    delay = 0;
+    LAD_reg = `LPC_START;
+    drive_lad = 1;
+    LFRAME = 0;
+    periph_data = 8'h7E;
+    #100 tpm_read (16'h7331, expected_data);
+    if (periph_data != expected_data)
+      $display("### Read failed, expected %2h, got %2h", periph_data, expected_data);
+
+    #40;
+    delay = 0;
+    // Extended LFRAME# with changing LAD
+    LAD_reg = `LPC_START;
+    drive_lad = 1;
+    LFRAME = 0;
+    expected_data = 8'h48;
+    #40 LAD_reg = 4'h1;
+    #30 LAD_reg = 4'h3;
+    #50 LAD_reg = 4'h7;
+    #20 LAD_reg = 4'hF;
+    #10 LAD_reg = 4'h3;
+    #15 LAD_reg = 4'h1;
+    periph_data = 8'h7E;
+    tpm_read (16'h7331, expected_data);
+    if (periph_data != expected_data)
+      $display("### Read failed, expected %2h, got %2h", periph_data, expected_data);
+
+    #40;
+    LAD_reg = 4'h1;
+    drive_lad = 1;
+    LFRAME = 0;
+    expected_data = 8'h48;
+    #40 LAD_reg = 4'h1;
+    #30 LAD_reg = 4'h3;
+    #15 LAD_reg = 4'h7;
+    periph_data = 8'h7E;
+    tpm_read (16'h7331, expected_data);
+    if (periph_data != expected_data)
+      $display("### Read failed, expected %2h, got %2h", periph_data, expected_data);
+
+    #40;
+    LAD_reg = 4'h1;
+    drive_lad = 1;
+    LFRAME = 0;
+    expected_data = 8'h94;
+    #40 LAD_reg = 4'h1;
+    #30 LAD_reg = 4'h3;
+    #15 LAD_reg = 4'h7;
+    periph_data = 8'h3E;
+    lpc_read (4'hz, `LPC_IO_READ, 16'h7331, expected_data);
+    if (periph_data == expected_data)
+      $display("### Read completed without valid START");
+
+    #40;
+    LAD_reg = 4'h1;
+    drive_lad = 1;
+    LFRAME = 0;
+    expected_data = 8'h94;
+    #40 LAD_reg = 4'h1;
+    #30 LAD_reg = 4'h3;
+    #15 LAD_reg = 4'h7;
+    periph_data = 8'h34;
+    lpc_read (4'h3, `LPC_IO_READ, 16'h7428, expected_data);
+    if (periph_data == expected_data)
+      $display("### Read completed without valid START");
+
+    #40;
+    LAD_reg = 4'h1;
+    drive_lad = 1;
+    LFRAME = 0;
+    expected_data = 8'h94;
+    #40 LAD_reg = 4'h1;
+    #30 LAD_reg = `LPC_START;
+    #55 LAD_reg = 4'h7;
+    periph_data = 8'h82;
+    lpc_read (4'hz, `LPC_IO_READ, 16'h7157, expected_data);
+    if (periph_data == expected_data)
+      $display("### Read completed without valid START");
+
+    // Short but proper LPC_START
+    fork
+      begin
+        @(negedge LCLK);
+        #15 LAD_reg = `LPC_START;
+        #10 LAD_reg = 4'h7;
+      end
+      begin
+        expected_data = 8'h17;
+        periph_data = 8'h9F;
+        lpc_read (4'hz, `LPC_IO_READ, 16'h7431, expected_data);
+        if (periph_data != expected_data)
+          $display("### Read failed, expected %2h, got %2h", periph_data, expected_data);
+      end
+    join
+
+    // Bad START surrounded by proper LPC_STARTs
+    fork
+      begin
+        @(negedge LCLK);
+        #1  LAD_reg = `LPC_START;
+        #14 LAD_reg = 4'h3;
+        #10 LAD_reg = `LPC_START;
+      end
+      begin
+        expected_data = 8'h59;
+        periph_data = 8'h76;
+        lpc_read (4'hz, `LPC_IO_READ, 16'h7331, expected_data);
+        if (periph_data == expected_data)
+          $display("### Read completed without valid START");
+        end
+    join
 
     // TODO: abort mechanism
 
