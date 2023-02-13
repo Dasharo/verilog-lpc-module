@@ -123,6 +123,8 @@ module lpc_periph (
       `LPC_ST_IDLE: begin
         if ((lframe_i == 1'b0) && (lad_bus == `LPC_START)) fsm_next_state <= `LPC_ST_START;
         else fsm_next_state <= `LPC_ST_IDLE;
+        waiting_on_write <= 1'b0;
+        waiting_on_read  <= 1'b0;
       end
       `LPC_ST_START: begin
         if ((lframe_i == 1'b0) && (lad_bus == `LPC_START)) fsm_next_state <= `LPC_ST_START;
@@ -154,7 +156,13 @@ module lpc_periph (
         fsm_next_state  <= `LPC_ST_TAR_RD_CLK1;
       end
       `LPC_ST_TAR_RD_CLK1:    fsm_next_state <= `LPC_ST_TAR_RD_CLK2;
-      `LPC_ST_TAR_RD_CLK2:    fsm_next_state <= `LPC_ST_SYNC_RD;
+      `LPC_ST_TAR_RD_CLK2: begin
+        if (lframe_i == 0) begin
+          driving_data    <= 1'b0;
+          fsm_next_state  <= `LPC_ST_IDLE;
+        end else
+          fsm_next_state <= `LPC_ST_SYNC_RD;
+      end
       `LPC_ST_SYNC_RD:        fsm_next_state <= `LPC_ST_DATA_RD_CLK1;
       `LPC_ST_DATA_RD_CLK1: begin
         fsm_next_state    <= `LPC_ST_DATA_RD_CLK2;
@@ -190,7 +198,13 @@ module lpc_periph (
         fsm_next_state   <= `LPC_ST_TAR_WR_CLK1;
       end
       `LPC_ST_TAR_WR_CLK1:    fsm_next_state <= `LPC_ST_TAR_WR_CLK2;
-      `LPC_ST_TAR_WR_CLK2:    fsm_next_state <= `LPC_ST_SYNC_WR;
+      `LPC_ST_TAR_WR_CLK2: begin
+        if (lframe_i == 0) begin
+          driving_data    <= 1'b0;
+          fsm_next_state  <= `LPC_ST_IDLE;
+        end else
+          fsm_next_state <= `LPC_ST_SYNC_WR;
+      end
       `LPC_ST_SYNC_WR:        fsm_next_state <= `LPC_ST_FINAL_TAR_CLK1;
       // `LPC_ST_FINAL_TAR_CLK1 goes to idle immediately
       default:                fsm_next_state <= `LPC_ST_IDLE;
