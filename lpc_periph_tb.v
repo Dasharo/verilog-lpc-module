@@ -180,6 +180,32 @@ module lpc_periph_tb ();
     lpc_read (`LPC_START, `LPC_IO_READ, addr, data);
   endtask
 
+  task lpc_abort_after_n_cycles (input integer n);
+    begin
+      @(negedge LCLK);
+      #(n * 40);
+      LFRAME = 0;
+      //
+      // From specification:
+      //
+      // "To ensure that the abort will be seen, the host must keep LFRAME# active for at least
+      // four consecutive clocks and drive LAD[3:0] to ‘1111b’ no later than the 4th clock after
+      // LFRAME# goes active." - 3 clocks here, one later.
+      //
+      #(3 * 40);
+      LAD_reg = 4'hF;
+      drive_lad = 1;
+      @(posedge LCLK);
+      @(negedge LCLK);
+      // "The host must drive LFRAME# inactive (high) for at least 1 clock after an abort."
+      LFRAME = 1;
+      drive_lad = 0;
+      // Test LAD after signal is stable. Note that final cycle is enforced by next lpc_{read,write}
+      #1 if (LAD !== 4'hz)
+        $display("### Device drives LAD after abort cycle @ %t", $realtime - 1);
+    end
+  endtask
+
   initial begin
     LCLK = 1'b1;
     forever #20 LCLK = ~LCLK;
@@ -611,7 +637,103 @@ module lpc_periph_tb ();
         end
     join
 
-    // TODO: abort mechanism
+    #500;
+    //
+    // Abort mechanism - excerpt from specification:
+    //
+    // "An abort will typically occur on SYNC time-outs (when a peripheral is driving SYNC longer
+    // than allowed), on cycles where there is no response (which will occur if the host is
+    // programmed incorrectly), or if a device drives a reserved SYNC value."
+    //
+    // Reserved SYNC value should be caught by lpc_{read,write}, so only two cases are left. Both
+    // of them occur at the same point in transmission - during SYNC. For write this starts after
+    // 10th cycle, for read - 8th cycle, and continues for 'delay' cycles.
+    //
+    $display("Testing abort mechanism - write");
+    delay = 10;
+    fork : abort1
+      begin
+        lpc_abort_after_n_cycles (12);
+        disable abort1;
+      end
+      begin
+        expected_data = 8'h75;
+        tpm_write (16'h130F, expected_data);
+        // 'disable abort1' above should happen before lpc_write finishes
+        $display("### Write not aborted @ %t", $realtime);
+      end
+    join
+    // Device should be able to accept next command immediately
+    delay = 0;
+    expected_data = 8'h92;
+    tpm_write (16'h8278, expected_data);
+    if (periph_data != expected_data)
+      $display("### Write failed, expected %2h, got %2h", expected_data, periph_data);
+
+
+    // Same as before, but for non-TPM cycle (covers "no response" case)
+    delay = 10;
+    fork : abort2
+      begin
+        lpc_abort_after_n_cycles (12);
+        disable abort2;
+      end
+      begin
+        expected_data = 8'h50;
+        lpc_write (4'h0, `LPC_IO_WRITE, 16'h0F38, expected_data);
+        // Due to 'rsp_expected' lpc_write finishes earlier than for TPM cycle, add delay here
+        #(delay * 40) $display("### Write not aborted @ %t", $realtime);
+      end
+    join
+    delay = 0;
+    expected_data = 8'h2B;
+    tpm_write (16'h78CE, expected_data);
+    if (periph_data != expected_data)
+      $display("### Write failed, expected %2h, got %2h", expected_data, periph_data);
+
+    #50;
+
+    $display("Testing abort mechanism - read");
+    delay = 10;
+    fork : abort3
+      begin
+        lpc_abort_after_n_cycles (10);
+        disable abort3;
+      end
+      begin
+        periph_data = 8'hCA;
+        tpm_read (16'hFFAD, expected_data);
+        // 'disable abort1' above should happen before lpc_read finishes
+        $display("### Read not aborted @ %t", $realtime);
+      end
+    join
+    // Device should be able to accept next command immediately
+    delay = 0;
+    periph_data = 8'hAC;
+    tpm_read (16'h00DB, expected_data);
+    if (periph_data != expected_data)
+      $display("### Read failed, expected %2h, got %2h", periph_data, expected_data);
+
+
+    // Same as before, but for non-TPM cycle (covers "no response" case)
+    delay = 10;
+    fork : abort4
+      begin
+        lpc_abort_after_n_cycles (10);
+        disable abort4;
+      end
+      begin
+        periph_data = 8'hFE;
+        lpc_read (4'h0, `LPC_IO_READ, 16'h38A5, expected_data);
+        // Due to 'rsp_expected' lpc_read finishes earlier than for TPM cycle, add delay here
+        #(delay * 40) $display("### Read not aborted @ %t", $realtime);
+      end
+    join
+    delay = 0;
+    periph_data = 8'hB2;
+    tpm_read (16'hDB30, expected_data);
+    if (periph_data != expected_data)
+      $display("### Read failed, expected %2h, got %2h", periph_data, expected_data);
 
     #1000;
     //------------------------------
