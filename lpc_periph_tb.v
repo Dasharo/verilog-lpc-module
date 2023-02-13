@@ -654,10 +654,9 @@ module lpc_periph_tb ();
       $display("### Unexpected LRESET deassertion @ %t", $realtime);
   end
 
-  reg [3:0] old_LAD;
-  realtime t;
-
-  always @(LAD, lpc_data_io) begin
+  always @(LAD, lpc_data_io) begin : multidrive_test
+    reg [3:0] old_LAD;
+    realtime t;
     // Skip initial state
     if ($realtime != 0) begin
       // Each bit must be tested individually, otherwise states like x1x1 wouldn't be caught
@@ -672,7 +671,7 @@ module lpc_periph_tb ();
         #1;
         if (((old_LAD | LAD) !== LAD) || ((old_LAD & LAD) !== old_LAD) ||
             (LAD[0] === 1'bx || LAD[1] === 1'bx || LAD[2] === 1'bx || LAD[3] === 1'bx))
-          $display("### Multiple LAD drivers (%b) LCLK = %b @ %t", LAD, LCLK, t);
+          $display("### Multiple LAD drivers (%b -> %b) @ %t", old_LAD, LAD, t);
       end
       if (lpc_data_io[0] === 1'bx || lpc_data_io[1] === 1'bx || lpc_data_io[2] === 1'bx ||
           lpc_data_io[3] === 1'bx || lpc_data_io[4] === 1'bx || lpc_data_io[5] === 1'bx ||
