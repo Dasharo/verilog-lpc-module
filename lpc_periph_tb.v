@@ -106,7 +106,8 @@ module lpc_periph_tb ();
         $display("### LAD not driven on TAR1 @ %t", $realtime);
       else if (LRESET && rsp_expected && LAD !== 4'hF)
         $display("### Unexpected LAD on TAR1 (%b) @ %t", LAD, $realtime);
-      @(posedge LCLK) if (LAD !== 4'hz)       // TAR2
+      @(posedge LCLK)                         // TAR2
+      if (LRESET == 1 && LAD !== 4'hz)
         $display("### LAD driven on TAR2 @ %t", $realtime);
       // Task should end on negedge, but because it also starts on negedge we end after posedge
       // here to make back-to-back invocations possible
@@ -182,8 +183,7 @@ module lpc_periph_tb ();
 
   task lpc_abort_after_n_cycles (input integer n);
     begin
-      @(negedge LCLK);
-      #(n * 40);
+      repeat(n+1) @(negedge LCLK);
       LFRAME = 0;
       //
       // From specification:
@@ -192,10 +192,9 @@ module lpc_periph_tb ();
       // four consecutive clocks and drive LAD[3:0] to ‘1111b’ no later than the 4th clock after
       // LFRAME# goes active." - 3 clocks here, one later.
       //
-      #(3 * 40);
-      LAD_reg = 4'hF;
+      repeat(3) @(negedge LCLK);
+      LAD_reg = `LPC_STOP;
       drive_lad = 1;
-      @(posedge LCLK);
       @(negedge LCLK);
       // "The host must drive LFRAME# inactive (high) for at least 1 clock after an abort."
       LFRAME = 1;
