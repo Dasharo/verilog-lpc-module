@@ -67,7 +67,7 @@ module lpc_periph (
 
   // verilog_format: on
 
-  always @(negedge clk_i or negedge nrst_i or posedge lframe_i) begin
+  always @(negedge clk_i or negedge nrst_i) begin
     if (~nrst_i) begin
       prev_state_o     <= `LPC_ST_IDLE;
       driving_data     <= 1'b0;
