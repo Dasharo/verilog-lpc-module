@@ -80,7 +80,6 @@ module lpc_periph (
         `LPC_ST_IDLE: begin
           waiting_on_write <= 1'b0;
           waiting_on_read  <= 1'b0;
-          driving_data     <= 1'b0;
           prev_state_o     <= fsm_next_state;
         end
         // Read
@@ -214,11 +213,11 @@ module lpc_periph (
           end else
             fsm_next_state <= `LPC_ST_SYNC_WR;
         end
-        `LPC_ST_SYNC_WR:        fsm_next_state <= `LPC_ST_FINAL_TAR_CLK1;
-        `LPC_ST_FINAL_TAR_CLK1: begin
-          driving_data <= 1'b0;
-          fsm_next_state <= `LPC_ST_IDLE;
+        `LPC_ST_SYNC_WR: begin
+          driving_data   <= 1'b0;
+          fsm_next_state <= `LPC_ST_FINAL_TAR_CLK1;
         end
+        `LPC_ST_FINAL_TAR_CLK1: fsm_next_state <= `LPC_ST_IDLE;
         default:                fsm_next_state <= `LPC_ST_IDLE;
       endcase
     end
@@ -239,7 +238,7 @@ module lpc_periph (
   assign lad_bus = (prev_state_o == `LPC_ST_DATA_RD_CLK1) ? lpc_data_reg_r[7:4] : 4'bzzzz;
 
   assign lpc_addr_o   = lpc_addr_reg;
-  assign lpc_data_io  = (driving_data == 1'b1) ? lpc_data_reg_w : 8'hzz;
+  assign lpc_data_io  = (driving_data == 1'b1 && waiting_on_write == 1'b1) ? lpc_data_reg_w : 8'hzz;
   assign lpc_data_wr  = waiting_on_write;
   assign lpc_data_req = waiting_on_read;
 endmodule
