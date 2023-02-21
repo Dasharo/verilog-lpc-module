@@ -265,16 +265,19 @@ module lpc_periph_tb ();
       fork : rw
         begin
           tpm_write (16'hFFFF, expected_data);
-          $display("Write completed but it shouldn't @ %t", $realtime);
+          @(negedge LCLK);  // tpm_write ends on posedge
+          // Order of execution between two forked branches is undefined so delay by one timestep
+          #1 $display("### Write completed but it shouldn't @ %t", $realtime);
           disable rw;
         end
         begin
-          #i LRESET = 0;
+          @(negedge LCLK);  // tpm_write starts at negedge, so should we
+          #i LRESET <= 0;
           #(((timeout + delay) * 40) - i);
           disable rw;
         end
       join
-      LRESET = 1;
+      LRESET <= 1;
       #40;
     end
 
@@ -287,16 +290,19 @@ module lpc_periph_tb ();
       fork : rr
         begin
           tpm_read (16'h1423, expected_data);
-          $display("Read completed but it shouldn't @ %t", $realtime);
+          @(negedge LCLK);  // tpm_read ends on posedge
+          // Order of execution between two forked branches is undefined so delay by one timestep
+          #1 $display("### Read completed but it shouldn't @ %t", $realtime);
           disable rr;
         end
         begin
-          #i LRESET = 0;
+          @(negedge LCLK);  // tpm_read starts at negedge, so should we
+          #i LRESET <= 0;
           #(((timeout + delay) * 40) - i);
           disable rr;
         end
       join
-      LRESET = 1;
+      LRESET <= 1;
       #40;
     end
 
@@ -309,16 +315,19 @@ module lpc_periph_tb ();
       fork : rwd
         begin
           tpm_write (16'hFFFF, expected_data);
-          $display("Write completed but it shouldn't @ %t", $realtime);
+          @(negedge LCLK);  // tpm_write ends on posedge
+          // Order of execution between two forked branches is undefined so delay by one timestep
+          #1 $display("### Write completed but it shouldn't @ %t", $realtime - 1);
           disable rwd;
         end
         begin
-          #i LRESET = 0;
+          @(negedge LCLK);  // tpm_write starts at negedge, so should we
+          #i LRESET <= 0;
           #(((timeout + delay) * 40) - i);
           disable rwd;
         end
       join
-      LRESET = 1;
+      LRESET <= 1;
       #40;
     end
 
@@ -331,16 +340,19 @@ module lpc_periph_tb ();
       fork : rrd
         begin
           tpm_read (16'h1423, expected_data);
-          $display("Read completed but it shouldn't @ %t", $realtime);
+          @(negedge LCLK);  // tpm_read ends on posedge
+          // Order of execution between two forked branches is undefined so delay by one timestep
+          #1 $display("### Read completed but it shouldn't @ %t", $realtime);
           disable rrd;
         end
         begin
-          #i LRESET = 0;
+          @(negedge LCLK);  // tpm_write starts at negedge, so should we
+          #i LRESET <= 0;
           #(((timeout + delay) * 40) - i);
           disable rrd;
         end
       join
-      LRESET = 1;
+      LRESET <= 1;
       #40;
     end
 
@@ -747,10 +759,13 @@ module lpc_periph_tb ();
   always @(posedge LCLK) begin
     if (lpc_data_wr == 1) begin
       cur_delay = cur_delay + 1;
-      if (cur_delay > delay) begin
+      // lpc_data_wr is signalled on negedge between DATA2 and TAR1, so we should add 2 cycles.
+      // lpc_wr_done is detected on negedge, during which final SYNC begins being driven, so we
+      // subtract 1 cycle, which gives total of +1 cycle.
+      if (cur_delay > delay + 1) begin
         periph_data = lpc_data_io;
-        lpc_wr_done = 1;
         cur_delay = 0;
+        lpc_wr_done = 1;
       end
     end else if (lpc_data_req == 0 && lpc_data_wr == 0) begin
       lpc_wr_done = 0;
@@ -759,9 +774,12 @@ module lpc_periph_tb ();
 
     if (lpc_data_req == 1) begin
       cur_delay = cur_delay + 1;
-      if (cur_delay > delay) begin
-        lpc_data_rd = 1;
+      // lpc_data_req is signalled on negedge between ADDR4 and TAR1, so we should add 2 cycles.
+      // lpc_data_rd is detected on negedge, during which final SYNC begins being driven, so we
+      // subtract 1 cycle, which gives total of +1 cycle.
+      if (cur_delay > delay + 1) begin
         cur_delay = 0;
+        lpc_data_rd = 1;
       end
     end else if (lpc_data_wr == 0 && lpc_data_req == 0) begin
       lpc_data_rd = 0;
