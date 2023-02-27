@@ -55,13 +55,70 @@ module lpc_periph_tb ();
 
   integer     cur_delay, delay, i;
   reg  [ 3:0] LAD_reg = 4'h0;
+  reg         drive_lad = 0;
   reg         drive_lpc_data = 0;
   reg         expect_reset = 1;
-  reg         drive_lad = 0;
+  reg         SERIRQ_reg = 0;
+  reg         SERIRQ_mode = `LPC_SERIRQ_CONT_MODE;
+  reg         drive_serirq = 0;
   // TPM read/write w/o delay takes 13 clock cycles. Add 1 for final interval, sub 1 for TAR.
   parameter   timeout = 13;
+  // 16 IRQ frames + one reserved (aka. IOCHCK#)
+  parameter   serirq_frames = 17;
 
   // verilog_format: on
+
+  task serirq_task (
+      input integer start_clks,
+      input integer stop_clks,
+      input integer idle_clks,
+      input integer padding_clks
+  );
+    integer i;
+    reg irq_hit;
+    begin
+      // Start frame - set SERIRQ low
+      SERIRQ_reg   = 0;
+      drive_serirq = 1;
+      repeat (start_clks) @(posedge LCLK);
+      // Set SERIRQ high
+      SERIRQ_reg   = 1;
+      @(posedge LCLK);
+      // High-Z on SERIRQ
+      drive_serirq = 0;
+      @(posedge LCLK);
+
+      // Loop over IRQ frames
+      for (i = 0; i < serirq_frames; i = i + 1) begin
+        irq_hit = 0;
+        @(negedge LCLK);
+        if (SERIRQ === 1'b0) begin
+          $display("Received IRQ%1d @ %t", i, $realtime);
+          irq_hit = 1;
+        end
+        @(negedge LCLK);
+        if (irq_hit && SERIRQ !== 1'b1)
+          $display("### SERIRQ not driven high during Recovery phase after IRQ @ %t", $realtime);
+        @(negedge LCLK);
+        if (SERIRQ !== 1'bz)
+          $display("### SERIRQ driven during turn-around phase @ %t", $realtime);
+      end
+      @(posedge LCLK);
+
+      repeat (idle_clks) @(posedge LCLK);
+
+      // Stop frame - set SERIRQ low
+      SERIRQ_reg   = 0;
+      drive_serirq = 1;
+      repeat (stop_clks) @(posedge LCLK);
+      // Set SERIRQ high
+      SERIRQ_reg   = 1;
+      @(posedge LCLK);
+      // High-Z on SERIRQ
+      drive_serirq = 0;
+      @(negedge LCLK);
+    end
+  endtask
 
   task lpc_addr (input [15:0] addr);
     begin
@@ -762,6 +819,7 @@ module lpc_periph_tb ();
 
   assign lpc_data_io = lpc_data_rd ? periph_data : 8'hzz;
   assign LAD = drive_lad ? LAD_reg : 4'hz;
+  assign SERIRQ = drive_serirq ? SERIRQ_reg : 1'bz;
 
   // Simulate response to read and write requests with optional delay
   always @(posedge LCLK) begin
@@ -825,6 +883,25 @@ module lpc_periph_tb ();
           lpc_data_io[6] === 1'bx || lpc_data_io[7] === 1'bx)
         $display("### Multiple lpc_data_io drivers (%b) @ %t", lpc_data_io, $realtime);
     end
+  end
+
+  // SERIRQ task starting
+  always @(posedge LCLK) begin
+    if (LRESET) begin
+      if (SERIRQ_mode == `LPC_SERIRQ_CONT_MODE)
+        serirq_task (4, 3, 0, 0);
+      else begin
+        @(negedge LCLK) if (SERIRQ === 1'b0)
+          serirq_task (3, 2, 0, 0);
+      end
+    end
+  end
+
+  // Must be in separate 'always' block, otherwise serirq_task would block detection of resets
+  always @(negedge LRESET) begin
+    disable serirq_task;
+    SERIRQ_mode = `LPC_SERIRQ_CONT_MODE;
+    drive_serirq = 0;
   end
 
   // LPC Peripheral instantiation
