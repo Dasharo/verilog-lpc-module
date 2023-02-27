@@ -74,7 +74,6 @@ module lpc_periph (
       driving_data     <= 1'b0;
       waiting_on_write <= 1'b0;
       waiting_on_read  <= 1'b0;
-      // TODO: clear everything, stop driving LAD
     end else begin
       case (fsm_next_state)
         `LPC_ST_IDLE: begin
@@ -187,11 +186,11 @@ module lpc_periph (
           fsm_next_state    <= `LPC_ST_ADDR_WR_CLK4;
         end
         `LPC_ST_ADDR_WR_CLK4: begin
-          lpc_data_reg_w[7:4] <= lad_bus;
+          lpc_data_reg_w[3:0] <= lad_bus;
           fsm_next_state      <= `LPC_ST_DATA_WR_CLK1;
         end
         `LPC_ST_DATA_WR_CLK1: begin
-          lpc_data_reg_w[3:0] <= lad_bus;
+          lpc_data_reg_w[7:4] <= lad_bus;
           driving_data        <= 1'b1;
           fsm_next_state      <= `LPC_ST_DATA_WR_CLK2;
         end

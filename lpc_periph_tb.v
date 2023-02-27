@@ -144,8 +144,8 @@ module lpc_periph_tb ();
       @(negedge LCLK) LFRAME = 1;
       LAD_reg = cycdir;                         // CYCTYPE + DIR
       lpc_addr (addr);                          // ADDR
-      @(negedge LCLK) LAD_reg = data[7:4];      // DATA
-      @(negedge LCLK) LAD_reg = data[3:0];
+      @(negedge LCLK) LAD_reg = data[3:0];      // DATA
+      @(negedge LCLK) LAD_reg = data[7:4];
       lpc_tar_h2p_sync (rsp_expected);          // TAR, SYNC
       lpc_tar_p2h (rsp_expected);               // TAR
     end
