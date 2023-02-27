@@ -33,12 +33,15 @@ module lpc_periph (
     nrst_i,
     lframe_i,
     lad_bus,
+    serirq,
     lpc_data_io,
     lpc_addr_o,
     lpc_data_wr,
     lpc_wr_done,
     lpc_data_rd,
-    lpc_data_req
+    lpc_data_req,
+    irq_num,
+    interrupt
 );
   // verilog_format: off  // verible-verilog-format messes up comments alignment
   // LPC interface
@@ -46,6 +49,7 @@ module lpc_periph (
   input  wire        nrst_i;       // LPC reset (active low)
   input  wire        lframe_i;     // LPC frame input (active low)
   inout  wire [ 3:0] lad_bus;      // LPC data bus
+  inout  wire        serirq;       // LPC SERIRQ signal
 
   // Interface to data provider
   inout  wire [ 7:0] lpc_data_io;  // Data received (I/O Write) or to be sent (I/O Read) to host
@@ -55,6 +59,8 @@ module lpc_periph (
   input  wire        lpc_data_rd;  // Signal from data provider that lpc_data_io has data for read
   output wire        lpc_data_req; // Signal to data provider that is requested (@posedge) or
                                    // has been read (@negedge)
+  input  wire [ 3:0] irq_num;      // IRQ number, copy of TPM_INT_VECTOR_x.sirqVec
+  input  wire        interrupt;    // Whether interrupt should be signaled to host, active high
 
   // Internal signals
   reg [ 4:0] prev_state_o;         // Previous peripheral state (FSM)
@@ -62,11 +68,99 @@ module lpc_periph (
   reg [ 7:0] lpc_data_reg_w = 0;   // Copy of lpc_data_io's data (LPC -> data provider)
   reg [ 7:0] lpc_data_reg_r = 0;   // Copy of lpc_data_io's data (data provider -> LPC)
   reg [15:0] lpc_addr_reg = 0;     // Driver of lpc_addr_o
-  reg        waiting_on_write = 0;
-  reg        waiting_on_read = 0;
-  reg        driving_data = 0;
+  reg        waiting_on_write = 0; // LPC interface is waiting for data to be acked by data provider
+  reg        waiting_on_read = 0;  // LPC interface is waiting for data sent from data provider
+  reg        driving_data = 0;     // Data on interface to data provider is driven by LPC module
+  reg [ 3:0] irq_num_reg = 0;      // IRQ number, latched on SERIRQ start frame
+  reg        serirq_count_en = 0;  // Are we between SERIRQ start (exclusive) and stop (inclusive)?
+  reg        serirq_reg = 1;       // Value driven on SERIRQ, if enabled
+  reg        driving_serirq = 0;   // Enable signal for driving SERIRQ by LPC module
+  reg        serirq_mode = 0;      // SERIRQ mode: Continuous (0) or Quiet (1)
 
   // verilog_format: on
+
+  always @(negedge nrst_i or posedge clk_i) begin : serirq_drive
+    integer    serirq_counter;
+    if (~nrst_i) begin
+      serirq_counter <= 0;
+      serirq_reg     <= 1;
+      driving_serirq <= 0;
+    end else begin
+      // Even if full SERIRQ is used (32 frames, 3 clocks each), TPM will never need to use anything
+      // after IRQ15, which ends after 47th clock. Leaving few cycles extra to catch any off-by-one
+      // errors in simulation more easily.
+      if (serirq_count_en && serirq_counter < 50)
+        serirq_counter <= serirq_counter + 1;
+      else if (~serirq_count_en)
+        serirq_counter <= 0;
+
+      // Initialize SERIRQ cycle if interrupt is requested and we're in Quiet mode
+      if (interrupt && serirq_mode == `LPC_SERIRQ_QUIET_MODE && ~serirq_count_en && serirq) begin
+        serirq_reg     <= 0;
+        driving_serirq <= 1;
+      end
+      // The only time when 'driving_serirq' is set and 'serirq_count_en' isn't is after above, use
+      // this as a signal to stop driving SERIRQ.
+      if (~serirq_count_en && driving_serirq)
+        driving_serirq <= 0;
+
+      // Notice this is the only time we check 'interrupt'. We need to do recovery/turn-around
+      // cycles even if 'interrupt' was deasserted in the meantime by data provider.
+      if (serirq_count_en && serirq_counter == irq_num_reg * 3 && interrupt) begin
+        serirq_reg     <= 0; // Sample phase, Active low
+        driving_serirq <= 1;
+      end
+      if (serirq_counter == irq_num_reg * 3 + 1 && driving_serirq) begin
+        serirq_reg     <= 1; // Recovery
+      end
+      if (serirq_counter == irq_num_reg * 3 + 2) begin
+        driving_serirq <= 0; // Turn-around
+      end
+    end
+  end
+
+  always @(negedge nrst_i or negedge clk_i) begin : serirq_sample
+    // Start frame consists of 4 to 8 clocks of low SERIRQ, 5th bit is for catching transition. In
+    // simulation this register may be shown in red, but it shouldn't contain any 'x' bits, only
+    // '0', '1' and 'z' are valid. On hardware all 'z's will become '1's because of pull-up.
+    reg [4:0] serirq_hist;
+    if (~nrst_i) begin
+      serirq_hist     <= 5'b11111;
+      serirq_count_en <= 0;
+      serirq_mode     <= `LPC_SERIRQ_CONT_MODE;
+    end else begin
+      // We're using non-blocking assignment, on top of it we're comparing history against a state
+      // in which transition to high (idle) SERIRQ already happened. Because of that, IRQn slot
+      // starts on (3*n)th clock cycle, instead of (3*n + 2), as described in specification.
+      serirq_hist <= {serirq_hist[3:0], serirq};
+
+      // Switch to Continuous mode every time SERIRQ is low, i.e. in the following cases:
+      // - Start frame, driven by host or a peripheral (first clock in Quiet mode; may be us)
+      // - Sample phase of any IRQ (ours or not)
+      // - Stop frame, driven by host
+      //
+      // All of those happen before we parse Stop frame pulse width, so proper mode is set/restored
+      // during turn-around phase of Stop frame.
+      //
+      // By doing so we ensure that we won't initiate SERIRQ cycle during recovery/turn-around phase
+      // of Start frame, when SERIRQ is already high but 'serirq_count_en' was not yet set.
+      if (serirq === 0)
+        serirq_mode     <= `LPC_SERIRQ_CONT_MODE;
+
+      if (serirq_hist === 5'b00001) begin
+        // Start frame -> latch IRQ number so it won't change in the middle of SERIRQ cycle
+        irq_num_reg     <= irq_num;
+        serirq_count_en <= 1;
+      end else if (serirq_hist[3:0] === 4'b0001) begin
+        // 3-clocks Stop frame -> stay in Continuous mode
+        serirq_count_en <= 0;
+      end else if (serirq_hist[2:0] === 3'b001) begin
+        // 2-clocks Stop frame -> switch to Quiet mode
+        serirq_mode     <= `LPC_SERIRQ_QUIET_MODE;
+        serirq_count_en <= 0;
+      end
+    end
+  end
 
   always @(negedge nrst_i or negedge clk_i) begin
     if (~nrst_i) begin
@@ -235,6 +329,8 @@ module lpc_periph (
                     prev_state_o == `LPC_ST_DATA_RD_CLK2) ? 4'b1111 : 4'bzzzz;
   assign lad_bus = (prev_state_o == `LPC_ST_SYNC_RD) ? lpc_data_reg_r[3:0] : 4'bzzzz;
   assign lad_bus = (prev_state_o == `LPC_ST_DATA_RD_CLK1) ? lpc_data_reg_r[7:4] : 4'bzzzz;
+
+  assign serirq = driving_serirq ? serirq_reg : 1'bz;
 
   assign lpc_addr_o   = lpc_addr_reg;
   assign lpc_data_io  = (driving_data == 1'b1 && waiting_on_write == 1'b1) ? lpc_data_reg_w : 8'hzz;

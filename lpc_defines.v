@@ -66,4 +66,6 @@
 `define LPC_ST_CYCTYPE_MEMORY_RD 5'h19  // LPC Memory Read (new, host only)
 `define LPC_ST_CYCTYPE_MEMORY_WR 5'h1A  // LPC Memory Write (new, host only)
 
+`define LPC_SERIRQ_CONT_MODE     1'b0
+`define LPC_SERIRQ_QUIET_MODE    1'b1
 // verilog_format: on

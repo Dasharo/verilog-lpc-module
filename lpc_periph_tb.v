@@ -37,7 +37,11 @@ module lpc_periph_tb ();
   reg         LCLK;           // Host LPC output clock
   reg         LRESET;         // Host LReset
   reg         LFRAME;         // Host LFRAME
-  wire  [3:0] LAD;            // Bi-directional (tri-state) LPC bus (multiplexed address and data 4-bit chunks)
+  wire [ 3:0] LAD;            // Bi-directional (tri-state) LPC bus (multiplexed address and data 4-bit chunks)
+  wire        SERIRQ;         // Bi-directional (tri-state) bus for serial IRQ
+                              // NOTE: both LAD and SERIRQ are normally pulled to high, but we're
+                              // deliberately not using 'tri1' type to test if peripheral drives
+                              // these signals when it shouldn't.
 
   wire [ 7:0] lpc_data_io;    // Data received (I/O Write) or to be sent (I/O Read) to host
   wire [15:0] lpc_addr_o;     // 16-bit LPC Peripheral Address
@@ -46,14 +50,16 @@ module lpc_periph_tb ();
   reg         lpc_data_rd;    // Signal from data provider that lpc_data_io has data for read
   wire        lpc_data_req;   // Signal to data provider that is requested (@posedge) or
                               // has been read (@negedge)
+  reg  [ 3:0] IRQn;           // IRQ number, copy of TPM_INT_VECTOR_x.sirqVec
+  reg         int;            // Whether interrupt should be signaled to host, active high
 
-  integer cur_delay, delay, i;
-  reg   [3:0] LAD_reg = 4'h0;
-  reg drive_lpc_data = 0;
-  reg expect_reset = 1;
-  reg drive_lad = 0;
+  integer     cur_delay, delay, i;
+  reg  [ 3:0] LAD_reg = 4'h0;
+  reg         drive_lpc_data = 0;
+  reg         expect_reset = 1;
+  reg         drive_lad = 0;
   // TPM read/write w/o delay takes 13 clock cycles. Add 1 for final interval, sub 1 for TAR.
-  parameter timeout = 13;
+  parameter   timeout = 13;
 
   // verilog_format: on
 
@@ -220,6 +226,8 @@ module lpc_periph_tb ();
     lpc_data_rd  = 0;
     delay        = 0;
     LFRAME       = 1;
+    IRQn         = 0;
+    int          = 0;
     #40 LRESET   = 0;
     #250 LRESET  = 1;
     expect_reset = 0;
@@ -826,13 +834,16 @@ module lpc_periph_tb ();
       .nrst_i(LRESET),
       .lframe_i(LFRAME),
       .lad_bus(LAD),
+      .serirq(SERIRQ),
       // Data provider interface
       .lpc_data_io(lpc_data_io),
       .lpc_addr_o(lpc_addr_o),
       .lpc_data_wr(lpc_data_wr),
       .lpc_wr_done(lpc_wr_done),
       .lpc_data_rd(lpc_data_rd),
-      .lpc_data_req(lpc_data_req)
+      .lpc_data_req(lpc_data_req),
+      .irq_num(IRQn),
+      .interrupt(int)
   );
 
 endmodule
