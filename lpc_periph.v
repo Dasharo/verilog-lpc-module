@@ -28,9 +28,8 @@
 
 `include "lpc_defines.v"
 
-module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, prev_state_o,
-                   din_i, lpc_data_in_o, lpc_data_out_o, lpc_addr_o, lpc_en_o,
-                   io_rden_sm_o, io_wren_sm_o, TDATA, READY
+module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, prev_state_o,
+                   lpc_addr_o
 );
 
     // Master Interface
@@ -42,84 +41,19 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, prev_state_o,
     inout  wire [ 3:0] lad_bus; // LPC data bus
 
     // Helper signals
-    input  wire        addr_hit_i;
     output reg  [ 4:0] prev_state_o;     //Previous peripheral state (FSM)
-    input  wire [ 7:0] din_i;            //Data sent when host requests a read
-    output reg  [ 7:0] lpc_data_in_o;    //Data received by peripheral for writing
-    output wire [ 3:0] lpc_data_out_o;   //Data sent to host when a read is requested
+    inout  wire [ 7:0] lpc_data_io;      //Data received by peripheral for writing or to be sent to host
     output wire [15:0] lpc_addr_o;       //16-bit LPC Peripheral Address
     output wire        lpc_en_o;         //Active-high status signal indicating the peripheral is ready for next operation.
     output wire        io_rden_sm_o;     //Active-high read status
     output wire        io_wren_sm_o;     //Active-high write status
-    output reg  [31:0] TDATA;            //32-bit register with LPC cycle: Address, Data(8-bit) and type of opertion
-    output reg         READY;            //Active-high status signal indicating that new cycle data is on TDATA
 
     // Internal signals
-    reg         sync_en;
-    reg   [3:0] rd_addr_en;
-    wire  [1:0] wr_data_en;
-    wire  [1:0] rd_data_en;
-    reg         tar_F;
     reg  [15:0] lpc_addr_o_reg;   //16-bit internal LPC address register
 
     reg   [4:0] fsm_next_state;   //State: next state of FSM
 
-    reg   [1:0] cycle_type = 2'b00; //"00" none, "01" write, "11" read
-    integer cycle_cnt = 0;          //auxiliary clock periods counter
-    reg  [31:0] dinAbuf = 32'b00000000000000000000000000000000; //32-bit register buffer for LPC cycle data (encoded)
-
-    reg  [31:0] memoryLPC [1:0]; //memory array 2x32bit
-    reg wasLframeLow = 1'b0;     //indicates that new LPC cycle started
-    reg wasLpc_enHigh = 1'b0;    //indicates that all current cycle data is ready
-    reg newValuedata = 1'b0;     //indicates that data on TDATA had been changed
-    reg skipCycle;               // 1 -indicates that this cycle is not I/O or TPM cycle, 0 - indicates I/O or TPM cycle
-
     assign lpc_addr_o = lpc_addr_o_reg;
-
-    always @ (posedge clk_i) begin    //save cycle type
-        cycle_type <= 2'b00;
-        if (io_rden_sm_o) begin
-            cycle_type <= 2'b11; //read
-        end;
-        if (io_wren_sm_o) begin
-            cycle_type <= 2'b01; //write
-        end;
-    end
-
-    always @ (posedge clk_i) begin  //saving LPC protocol data 2 out databus
-        if (lframe_i==1'b0) begin
-            wasLframeLow = 1'b1;
-            cycle_cnt = 0;
-            wasLpc_enHigh = 1'b0;
-        end
-            if ((lpc_en_o) && (wasLframeLow)) begin
-                wasLpc_enHigh = 1'b1;
-            end
-            if (wasLpc_enHigh) begin
-                cycle_cnt = cycle_cnt + 1;
-                if ((cycle_cnt > 1) && (cycle_cnt < 3)) begin
-                    dinAbuf[31:28] <= 4'b0000;
-                    dinAbuf[27:12] <= lpc_addr_o_reg;
-                    dinAbuf[11:4] <= lpc_data_in_o;
-                    dinAbuf[3:2] <= 2'b00;
-                    dinAbuf[1:0] <= cycle_type;
-                    if (dinAbuf==memoryLPC[0]) newValuedata = 1'b0;
-                    else newValuedata = 1'b1;
-                    TDATA <= dinAbuf;
-                    memoryLPC[0] <= dinAbuf;
-                end
-                else if ( (cycle_cnt >=3) && (cycle_cnt < 5)) begin
-                    if (newValuedata) READY <= 1'b1;
-                    else READY <= 1'b0;
-                end
-                else if  (cycle_cnt >= 5) begin
-                    READY <= 1'b0;
-                    wasLpc_enHigh = 1'b0;
-                    wasLframeLow = 1'b0;
-                    cycle_cnt = 0;
-            end
-        end
-    end
 
     always @ (negedge clk_i or negedge nrst_i or posedge lframe_i) begin
         if (~nrst_i)
@@ -138,9 +72,8 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, prev_state_o,
         case(prev_state_o)
             `LPC_ST_IDLE:
              begin
-                 skipCycle <= 1'b0;
-                 if (nrst_i == 1'b0) fsm_next_state <= `LPC_ST_IDLE;
-                 else if ((lframe_i == 1'b0) && (lad_bus == `LPC_START)) fsm_next_state <= `LPC_ST_START;
+                 if ((lframe_i == 1'b0) && (lad_bus == `LPC_START)) fsm_next_state <= `LPC_ST_START;
+                 else fsm_next_state <= `LPC_ST_IDLE;
              end
              `LPC_ST_START:
               begin
@@ -163,10 +96,7 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, prev_state_o,
               `LPC_ST_TAR_RD_CLK1:
                fsm_next_state <= `LPC_ST_TAR_RD_CLK2;
               `LPC_ST_TAR_RD_CLK2:
-               begin
-                   if (addr_hit_i == 1'b0) fsm_next_state <= `LPC_ST_IDLE;
-                   if (addr_hit_i == 1'b1) fsm_next_state <= `LPC_ST_SYNC_RD;
-               end
+               fsm_next_state <= `LPC_ST_SYNC_RD;
               `LPC_ST_SYNC_RD:
                fsm_next_state <= `LPC_ST_DATA_RD_CLK1;
               `LPC_ST_DATA_RD_CLK1:
@@ -191,10 +121,7 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, prev_state_o,
               `LPC_ST_TAR_WR_CLK1:
                fsm_next_state <= `LPC_ST_TAR_WR_CLK2;
               `LPC_ST_TAR_WR_CLK2:
-               begin
-                   if (addr_hit_i == 1'b0) fsm_next_state <= `LPC_ST_IDLE;
-                   if (addr_hit_i == 1'b1) fsm_next_state <= `LPC_ST_SYNC_WR;
-               end
+               fsm_next_state <= `LPC_ST_SYNC_WR;
               `LPC_ST_SYNC_WR:
                fsm_next_state <= `LPC_ST_FINAL_TAR_CLK1;
               `LPC_ST_FINAL_TAR_CLK1:
@@ -203,10 +130,6 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, prev_state_o,
                fsm_next_state <= `LPC_ST_IDLE;
         endcase
     end
-
-    assign rd_data_en = (fsm_next_state == `LPC_ST_DATA_RD_CLK1) ? 2'b01 :
-                        (fsm_next_state == `LPC_ST_DATA_RD_CLK2) ? 2'b10 :
-                        2'b00;
 
     /*
      * All LAD driving by peripheral should begin at negedge clk_i, because of
@@ -218,76 +141,7 @@ module lpc_periph (clk_i, nrst_i, lframe_i, lad_bus, addr_hit_i, prev_state_o,
     // TAR
     assign lad_bus = (prev_state_o == `LPC_ST_SYNC_WR ||
                       prev_state_o == `LPC_ST_DATA_RD_CLK2) ? 4'b1111 : 4'bzzzz;
-    assign lad_bus = (prev_state_o == `LPC_ST_SYNC_RD) ? din_i[3:0] : 4'bzzzz;
-    assign lad_bus = (prev_state_o == `LPC_ST_DATA_RD_CLK1) ? din_i[7:4] : 4'bzzzz;
+    assign lad_bus = (prev_state_o == `LPC_ST_SYNC_RD) ? lpc_data_io[3:0] : 4'bzzzz;
+    assign lad_bus = (prev_state_o == `LPC_ST_DATA_RD_CLK1) ? lpc_data_io[7:4] : 4'bzzzz;
 
-    assign io_wren_sm_o = (fsm_next_state == `LPC_ST_TAR_WR_CLK1) ? 1'b1 :
-                          (fsm_next_state == `LPC_ST_TAR_WR_CLK2) ? 1'b1 :
-                          1'b0;
-
-    always @ (posedge clk_i) begin
-        if (wr_data_en[0]) lpc_data_in_o[3:0] <= lad_bus;
-        if (wr_data_en[1]) lpc_data_in_o[7:4] <= lad_bus;
-    end
-
-    assign lpc_en_o = ((!skipCycle)&&(sync_en == 1'b1)) ? 1'h1 :
-                      ((!skipCycle)&&(tar_F == 1'b1 )) ? 1'h1 :
-                      (lframe_i == 1'b0 ) ? 1'h0 :
-                      ((!skipCycle)&&(rd_data_en[0] == 1'b1)) ? 1'b1 :
-                      ((!skipCycle)&&(rd_data_en[1] == 1'b1)) ? 1'b1 :
-                      1'h0;
-
-    always @ (posedge clk_i) begin
-        tar_F <= 1'b0;
-        case(fsm_next_state)
-            `LPC_ST_SYNC_RD:
-             sync_en <= 1'b1;
-            `LPC_ST_SYNC_WR:
-             sync_en <= 1'b1;
-            `LPC_ST_FINAL_TAR_CLK1:
-             tar_F <= 1'b1;
-            `LPC_ST_ADDR_RD_CLK1:
-             rd_addr_en <= 4'b1000;
-            `LPC_ST_ADDR_RD_CLK2:
-             rd_addr_en <= 4'b0100;
-            `LPC_ST_ADDR_RD_CLK3:
-             rd_addr_en <= 4'b0010;
-            `LPC_ST_ADDR_RD_CLK4:
-             rd_addr_en <= 4'b0001;
-            `LPC_ST_ADDR_WR_CLK1:
-             rd_addr_en <= 4'b1000;
-            `LPC_ST_ADDR_WR_CLK2:
-             rd_addr_en <= 4'b0100;
-            `LPC_ST_ADDR_WR_CLK3:
-             rd_addr_en <= 4'b0010;
-            `LPC_ST_ADDR_WR_CLK4:
-             rd_addr_en <= 4'b0001;
-            default:
-            begin
-                rd_addr_en <= 4'b0000;
-                tar_F <= 1'b0;
-                sync_en <= 1'b0;
-            end
-        endcase
-    end
-
-    assign io_rden_sm_o = (fsm_next_state == `LPC_ST_TAR_RD_CLK1) ? 1'b1 :
-                          (fsm_next_state == `LPC_ST_TAR_RD_CLK2) ? 1'b1 :
-                          1'b0;
-
-    assign wr_data_en = (fsm_next_state == `LPC_ST_DATA_WR_CLK1) ? 2'b01 :
-                        (fsm_next_state == `LPC_ST_DATA_WR_CLK2) ? 2'b10 :
-                        2'b00;
-
-
-    always @ (posedge clk_i) begin
-        if (rd_addr_en[3] == 1'b1) lpc_addr_o_reg[15:12] = lad_bus;
-        else if (rd_addr_en[3] == 1'b1) lpc_addr_o_reg[15:12] = lpc_addr_o_reg[15:12];
-        if (rd_addr_en[2] == 1'b1) lpc_addr_o_reg[11:8] = lad_bus;
-        else if (rd_addr_en[2] == 1'b1) lpc_addr_o_reg[11:8] = lpc_addr_o_reg[11:8];
-        if (rd_addr_en[1] == 1'b1) lpc_addr_o_reg[7:4] = lad_bus;
-        else if (rd_addr_en[1] == 1'b1) lpc_addr_o_reg[7:4] = lpc_addr_o_reg[7:4];
-        if (rd_addr_en[0] == 1'b1) lpc_addr_o_reg[3:0] = lad_bus;
-        else if (rd_addr_en[0] == 1'b1) lpc_addr_o_reg[3:0] = lpc_addr_o_reg[3:0];
-    end
 endmodule
