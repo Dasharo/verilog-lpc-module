@@ -65,6 +65,7 @@ module lpc_periph_tb ();
   parameter   timeout = 13;
   // 16 IRQ frames + one reserved (aka. IOCHCK#)
   parameter   serirq_frames = 17;
+  event       serirq_start_e, serirq_irq_e, serirq_stop_e;
 
   // verilog_format: on
 
@@ -87,13 +88,15 @@ module lpc_periph_tb ();
       // High-Z on SERIRQ
       drive_serirq = 0;
       @(posedge LCLK);
+      ->serirq_start_e;
 
       // Loop over IRQ frames
       for (i = 0; i < serirq_frames; i = i + 1) begin
         irq_hit = 0;
         @(negedge LCLK);
         if (SERIRQ === 1'b0) begin
-          $display("Received IRQ%1d @ %t", i, $realtime);
+          ->serirq_irq_e;
+          //$display("Received IRQ%1d @ %t", i, $realtime);
           irq_hit = 1;
         end
         @(negedge LCLK);
@@ -117,6 +120,7 @@ module lpc_periph_tb ();
       // High-Z on SERIRQ
       drive_serirq = 0;
       @(negedge LCLK);
+      ->serirq_stop_e;
     end
   endtask
 
@@ -812,6 +816,107 @@ module lpc_periph_tb ();
       $display("### Read failed, expected %2h, got %2h", periph_data, expected_data);
 
     #1000;
+
+    // Interrupts - Continuous mode
+    $display("Testing interrupts - Continuous mode:");
+    $display("  no interrupt reported when not requested?");
+    IRQn = 0;
+    int  = 0;
+    @(serirq_start_e);
+    fork : int_cont_noirq
+      begin
+        @(serirq_stop_e);
+        disable int_cont_noirq;
+      end
+      begin
+        @(serirq_irq_e);
+        $display("### IRQ received when not active @ %t", $realtime);
+      end
+    join
+
+    $display("  proper IRQ reported?");
+    int  = 1;
+    IRQn = 0;
+    // Must use 'repeat', IRQn would overflow with different loop types
+    repeat (16) begin
+      @(serirq_start_e);
+      for (i = 0; i < serirq_frames; i = i + 1) begin
+        @(negedge LCLK);
+        if (i == IRQn && SERIRQ !== 1'b0)
+          $display("### IRQ%1d not reported when expected @ %t", i, $realtime);
+        if (i != IRQn && SERIRQ !== 1'bz)
+          $display("### SERIRQ driven %s for IRQ%1d @ %t", SERIRQ ? "high" : "low", i, $realtime);
+        repeat (2) @(negedge LCLK); // Correctness of those phases is tested in serirq_task
+      end
+      IRQn = IRQn + 1;
+    end
+
+    $display("  IRQ number latched at start frame?");
+    int  = 1;
+    IRQn = 8;
+    i    = IRQn;
+    @(serirq_start_e);
+    IRQn = 0;
+    repeat (16) begin
+      @(negedge LCLK);
+      if (i == IRQn && SERIRQ !== 1'b0)
+        $display("### IRQ%1d not reported when expected @ %t", i, $realtime);
+      if (i != IRQn && SERIRQ !== 1'bz)
+        $display("### SERIRQ driven %s for IRQ%1d @ %t", SERIRQ ? "high" : "low", IRQn, $realtime);
+      repeat (2) @(negedge LCLK); // Correctness of those phases is tested in serirq_task
+      IRQn = IRQn + 1;
+    end
+
+    $display("  IRQ keeps being sent while active?");
+    IRQn = 7;
+    int  = 1;
+    repeat (3) begin
+      @(serirq_start_e);
+      fork : int_cont_noack
+        begin
+          @(serirq_stop_e);
+          $display("### IRQ not received when active @ %t", $realtime);
+        end
+        begin
+          @(serirq_irq_e);
+          disable int_cont_noack;
+        end
+      join
+    end
+
+    $display("  IRQ stops being sent when no longer active?");
+    IRQn = 5;
+    int  = 1;
+    @(serirq_start_e);
+    // We already tested multiple times that IRQ arrives here, just pass through
+    @(serirq_stop_e);
+    int  = 0;
+    @(serirq_start_e);
+    @(serirq_irq_e or serirq_stop_e);
+    if (SERIRQ === 1'b0) begin
+      $display("### IRQ received after interrupt was deactivated @ %t", $realtime);
+      @(serirq_stop_e);
+    end
+
+    $display("  recovery and turn-around phases executed when int is deactivated?");
+    IRQn = 4;
+    int  = 1;
+    @(serirq_start_e);
+    @(serirq_irq_e);
+    int  = 0;
+    // Actual test is done in serirq_task
+    @(serirq_stop_e);
+
+    // Same as above, but for turn-around phase only
+    int  = 1;
+    @(serirq_start_e);
+    @(serirq_irq_e);
+    @(negedge LCLK);
+    int  = 0;
+    @(serirq_stop_e);
+
+
+    #1000;
     //------------------------------
     $stop;
     $finish;
@@ -891,8 +996,11 @@ module lpc_periph_tb ();
       if (SERIRQ_mode == `LPC_SERIRQ_CONT_MODE)
         serirq_task (4, 3, 0, 0);
       else begin
-        @(negedge LCLK) if (SERIRQ === 1'b0)
+        @(negedge LCLK);
+        if (SERIRQ === 1'b0) begin
+          @(posedge LCLK);
           serirq_task (3, 2, 0, 0);
+        end
       end
     end
   end
