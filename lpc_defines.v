@@ -24,10 +24,10 @@
 // Public License along with this source; if not, download it
 // from http://www.opencores.org/lgpl.shtml
 
-`define LPC_START       4'b0000
+`define LPC_START       4'b0101
 `define LPC_STOP        4'b1111
 `define LPC_FW_READ     4'b1101
-`define LPC_FW_WRITE    4'b1110
+`define LPC_FW_TPM_WRITE    4'b1110
 
 `define LPC_IO_READ 4'b0000             // LPC I/O (or TPM I/O) read cycle
 `define LPC_IO_WRITE 4'b0010            // LPC I/O (or TPM I/O) write cycle
