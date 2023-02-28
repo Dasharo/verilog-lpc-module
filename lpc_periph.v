@@ -95,7 +95,8 @@ module lpc_periph (
         serirq_counter <= 0;
 
       // Initialize SERIRQ cycle if interrupt is requested and we're in Quiet mode
-      if (interrupt && serirq_mode == `LPC_SERIRQ_QUIET_MODE && ~serirq_count_en && serirq) begin
+      if (interrupt && serirq_mode == `LPC_SERIRQ_QUIET_MODE &&
+          ~serirq_count_en && serirq !== 1'b0) begin
         serirq_reg     <= 0;
         driving_serirq <= 1;
       end
