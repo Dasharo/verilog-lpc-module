@@ -989,9 +989,37 @@ module lpc_periph_tb ();
       IRQn = IRQn + 1;
     end
 
+    $display("  IRQs reported with longer start pulse width?");
+    SERIRQ_start_clks = 8;
+    IRQn = 11;
+    int  = 1;
+    @(serirq_start_e);
+    for (i = 0; i < serirq_frames; i = i + 1) begin
+      @(negedge LCLK);
+      if (i == IRQn && SERIRQ !== 1'b0)
+        $display("### IRQ%1d not reported when expected @ %t", i, $realtime);
+      if (i != IRQn && SERIRQ !== 1'bz)
+        $display("### SERIRQ driven %s for IRQ%1d @ %t", SERIRQ ? "high" : "low", i, $realtime);
+      repeat (2) @(negedge LCLK); // Correctness of those phases is tested in serirq_task
+    end
+
+    int  = 0;
+    @(serirq_start_e);
+    fork : int_cont_long_start
+      begin
+        @(serirq_stop_e);
+        disable int_cont_long_start;
+      end
+      begin
+        @(serirq_irq_e);
+        $display("### IRQ received when not active @ %t", $realtime);
+      end
+    join
+
     // We must switch mode before repeating above for Quiet mode, might as well test switching now
     $display("Testing interrupts - switching between modes:");
     $display("  peripheral doesn't initialize SERIRQ cycle in Quiet mode when not needed?");
+    SERIRQ_start_clks   = 4;
     SERIRQ_padding_clks = 0;
     SERIRQ_idle_clks    = 0;
     int                 = 0;
@@ -1194,9 +1222,86 @@ module lpc_periph_tb ();
       end
       IRQn = IRQn + 1;
     end
+    int  = 0;
+    @(serirq_stop_e);
 
     // "IRQs reported with idle clock cycles after stop frame?" - N/A, peripheral starts cycle
+    SERIRQ_padding_clks = 0;
 
+    $display("  peripheral keeps working after spurious interrupt?");
+    // When interrupt signal is deasserted after SERIRQ cycle is initiated, but before respective
+    // IRQ frame begins, it should not be reported.
+    IRQn = 6;  // Can't use IRQ0 here, it would already be reported at serirq_start_e
+    int  = 1;
+    @(serirq_start_e);
+    int  = 0;
+    fork : int_quiet_spurious
+      begin
+        @(serirq_stop_e);
+        disable int_quiet_spurious;
+      end
+      begin
+        @(serirq_irq_e);
+        $display("### IRQ received when not active @ %t", $realtime);
+      end
+    join
+
+    // As above, but interrupt is deasserted before start frame finishes
+    IRQn = 0;
+    int  = 1;
+    #40;
+    int  = 0;
+    @(serirq_start_e);
+    fork : int_quiet_spurious2
+      begin
+        @(serirq_stop_e);
+        disable int_quiet_spurious2;
+      end
+      begin
+        @(serirq_irq_e);
+        $display("### IRQ received when not active @ %t", $realtime);
+      end
+    join
+
+    // Now check if peripheral is still able of reporting IRQs
+    IRQn = 14;
+    int  = 1;
+    @(serirq_start_e);
+    for (i = 0; i < serirq_frames; i = i + 1) begin
+      @(negedge LCLK);
+      if (i == IRQn && SERIRQ !== 1'b0)
+        $display("### IRQ%1d not reported when expected @ %t", i, $realtime);
+      if (i != IRQn && SERIRQ !== 1'bz)
+        $display("### SERIRQ driven %s for IRQ%1d @ %t", SERIRQ ? "high" : "low", i, $realtime);
+      repeat (2) @(negedge LCLK); // Correctness of those phases is tested in serirq_task
+    end
+
+    $display("  IRQs reported with longer start pulse width?");
+    SERIRQ_start_clks = 8;
+    IRQn = 11;
+    int  = 1;
+    @(serirq_start_e);
+    for (i = 0; i < serirq_frames; i = i + 1) begin
+      @(negedge LCLK);
+      if (i == IRQn && SERIRQ !== 1'b0)
+        $display("### IRQ%1d not reported when expected @ %t", i, $realtime);
+      if (i != IRQn && SERIRQ !== 1'bz)
+        $display("### SERIRQ driven %s for IRQ%1d @ %t", SERIRQ ? "high" : "low", i, $realtime);
+      repeat (2) @(negedge LCLK); // Correctness of those phases is tested in serirq_task
+    end
+
+    int  = 0;
+    fork : int_quiet_long_start
+      begin
+        #1000;
+        disable int_quiet_long_start;
+      end
+      begin
+        @(serirq_irq_e);
+        $display("### IRQ received when not active @ %t", $realtime);
+        disable int_quiet_long_start;
+      end
+    join
 
     #1000;
     //------------------------------
