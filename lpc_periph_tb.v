@@ -1303,7 +1303,44 @@ module lpc_periph_tb ();
       end
     join
 
-    #1000;
+    // Reset to Continuous mode in preparation for reset testing
+    expect_reset = 1;
+    IRQn         = 8;
+    int          = 0;
+    #40 LRESET   = 0;
+    #250 LRESET  = 1;
+
+    $display("Testing interrupts - IRQ stops being reported on reset");
+    SERIRQ_start_clks = 4;
+    IRQn = 0;
+    int  = 1;
+
+    for (i = 0; i <= (2 /* start T+R */ + 3 /* IRQ0 */) * 40; i = i + 5) begin
+      @(serirq_start_e);
+      #i LRESET <= 0;
+      #1; // Wait one timestep to let signals stabilise
+      fork : irq_reset
+        begin
+          if (SERIRQ !== 1'bz)
+            $display("### SERIRQ driven after reset @ %t", $realtime);
+          @(negedge SERIRQ or posedge SERIRQ)
+            $display("### SERIRQ driven after reset @ %t", $realtime);
+          disable irq_reset;
+        end
+        begin
+          // We can't subtract 1 timestep we waited earlier, in corner case this would give #-1
+          #(((2 + 3) * 40) - i);
+          disable irq_reset;
+        end
+      join
+      LRESET <= 1;
+      #40;
+    end
+
+    expect_reset = 0;;
+    int  = 0;
+
+    #3000;
     //------------------------------
     $stop;
     $finish;
