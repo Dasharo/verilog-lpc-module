@@ -69,52 +69,54 @@ iverilog -o lpc_peri_module lpc_periph_tb.v lpc_periph.v lpc_defines.v
    file with timing simulation content:
 
 ```bash
-vvp -nv lpc_peri_module
+vvp -n lpc_peri_module
 ```
 
-You should see similar output from tool:
+You should see similar output from testbench:
 
 ```
-Compiling VVP ...
- ... VVP file version 10.3 (stable)
-Compile cleanup...
- ... Linking
- ... Removing symbol tables
- ... Compiletf functions
- ...      393 functors (net_fun pool=524288 bytes)
-                261 logic
-                  1 bufif
-                  1 resolv
-                 55 signals
- ...      378 filters (net_fil pool=524288 bytes)
- ...     1329 opcodes (49152 bytes)
- ...      113 nets
- ...      393 vvp_nets (1048544 bytes)
- ...        0 arrays (0 words)
- ...        2 memories
-                  2 logic (40 words)
-                  0 real (0 words)
- ...        4 scopes
- ... 0.023095 seconds, 16048.0/7420.0/4992.0 KBytes size/rss/shared
-Running ...
- ...execute EndOfCompile callbacks
- ...propagate initialization events
- ...execute StartOfSim callbacks
- ...run scheduler
-VCD info: dumpfile lpc_peri_tb.vcd opened for output.
- ...execute Postsim callbacks
- ... 0.135149 seconds, 16048.0/7420.0/4992.0 KBytes size/rss/shared
-Event counts:
-       13946 time steps (pool=128)
-       34643 thread schedule events
-       44479 assign events
-             ...assign(vec4) pool=9362
-             ...assign(vec8) pool=204
-             ...assign(real) pool=256
-             ...assign(word) pool=128
-             ...assign(word/r) pool=204
-      147768 other events (pool=4096)
+VCD info: dumpfile lpc_periph_tb.vcd opened for output.
+Performing TPM write w/o delay
+Performing TPM write with delay
+Performing TPM read with delay
+Performing TPM read w/o delay
+Testing reset behaviour - TPM write w/o delay
+Testing reset behaviour - TPM read w/o delay
+Testing reset behaviour - TPM write with delay
+Testing reset behaviour - TPM read with delay
+Testing non-TPM transactions
+Testing extended LFRAME# timings - write
+Testing extended LFRAME# timings - read
+Testing abort mechanism - write
+Testing abort mechanism - read
+Testing interrupts - Continuous mode:
+  no interrupt reported when not requested?
+  proper IRQ reported?
+  IRQ number latched at start frame?
+  IRQ keeps being sent while active?
+  IRQ stops being sent when no longer active?
+  recovery and turn-around phases executed when int is deactivated?
+  IRQs reported with idle clock cycles before stop frame?
+  IRQs reported with idle clock cycles after stop frame?
+  IRQs reported with longer start pulse width?
+Testing interrupts - switching between modes:
+  peripheral doesn't initialize SERIRQ cycle in Quiet mode when not needed?
+  peripheral initializes SERIRQ cycle when IRQ needed in Quiet mode?
+  reset switches peripheral to Continuous mode?
+Testing interrupts - Quiet mode:
+  proper IRQ reported?
+  IRQ number latched at start frame?
+  IRQ keeps being sent while active?
+  IRQ stops being sent when no longer active?
+  recovery and turn-around phases executed when int is deactivated?
+  IRQs reported with idle clock cycles before stop frame?
+  peripheral keeps working after spurious interrupt?
+  IRQs reported with longer start pulse width?
 ```
+
+Order, description and number of tests may change in the future. Make sure that
+the output doesn't contain lines starting with `###`, those are used to report
+errors in the behaviour of LPC module.
 
 As a result, `lpc_periph_tb.vcd` file containing simulation results (timing
 diagrams) will be produced.
