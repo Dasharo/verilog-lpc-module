@@ -17,6 +17,12 @@ It can be also easily simulated in open-source Verilog simulator - [Icarus
 Verilog](http://iverilog.icarus.com/) and visualized in the
 [GTKWave](http://gtkwave.sourceforge.net/).
 
+## Module diagram
+
+![Module diagram](lpc_periph.svg)
+
+Inputs are on the left side, outputs and bi-directional wires on the right.
+
 ## Simulation
 
 ### Prerequisites
