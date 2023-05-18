@@ -44,14 +44,14 @@ module lpc_periph (
     interrupt
 );
   // verilog_format: off  // verible-verilog-format messes up comments alignment
-  // LPC interface
+  //# {{LPC interface}}
   input  wire        clk_i;        // LPC clock
   input  wire        nrst_i;       // LPC reset (active low)
   input  wire        lframe_i;     // LPC frame input (active low)
   inout  wire [ 3:0] lad_bus;      // LPC data bus
   inout  wire        serirq;       // LPC SERIRQ signal
 
-  // Interface to data provider
+  //# {{Interface to data provider}}
   inout  wire [ 7:0] lpc_data_io;  // Data received (I/O Write) or to be sent (I/O Read) to host
   output wire [15:0] lpc_addr_o;   // 16-bit LPC Peripheral Address
   output wire        lpc_data_wr;  // Signal to data provider that lpc_data_io has valid write data
