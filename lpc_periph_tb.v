@@ -43,11 +43,12 @@ module lpc_periph_tb ();
                               // deliberately not using 'tri1' type to test if peripheral drives
                               // these signals when it shouldn't.
 
-  wire [ 7:0] lpc_data_io;    // Data received (I/O Write) or to be sent (I/O Read) to host
+  wire [ 7:0] lpc_data_i;     // Data to be sent (I/O Read) to host
+  wire [ 7:0] lpc_data_o;     // Data received (I/O Write) from host
   wire [15:0] lpc_addr_o;     // 16-bit LPC Peripheral Address
-  wire        lpc_data_wr;    // Signal to data provider that lpc_data_io has valid write data
-  reg         lpc_wr_done;    // Signal from data provider that lpc_data_io has been read
-  reg         lpc_data_rd;    // Signal from data provider that lpc_data_io has data for read
+  wire        lpc_data_wr;    // Signal to data provider that lpc_data_o has valid write data
+  reg         lpc_wr_done;    // Signal from data provider that lpc_data_o has been read
+  reg         lpc_data_rd;    // Signal from data provider that lpc_data_i has data for read
   wire        lpc_data_req;   // Signal to data provider that is requested (@posedge) or
                               // has been read (@negedge)
   reg  [ 3:0] IRQn;           // IRQ number, copy of TPM_INT_VECTOR_x.sirqVec
@@ -1346,7 +1347,7 @@ module lpc_periph_tb ();
     $finish;
   end
 
-  assign lpc_data_io = lpc_data_rd ? periph_data : 8'hzz;
+  assign lpc_data_i = periph_data;
   assign LAD = drive_lad ? LAD_reg : 4'hz;
   assign SERIRQ = drive_serirq ? SERIRQ_reg : 1'bz;
 
@@ -1358,7 +1359,7 @@ module lpc_periph_tb ();
       // lpc_wr_done is detected on negedge, during which final SYNC begins being driven, so we
       // subtract 1 cycle, which gives total of +1 cycle.
       if (cur_delay > delay + 1) begin
-        periph_data = lpc_data_io;
+        periph_data = lpc_data_o;
         cur_delay = 0;
         lpc_wr_done = 1;
       end
@@ -1388,7 +1389,7 @@ module lpc_periph_tb ();
       $display("### Unexpected LRESET deassertion @ %t", $realtime);
   end
 
-  always @(LAD, lpc_data_io) begin : multidrive_test
+  always @(LAD) begin : multidrive_test
     reg [3:0] old_LAD;
     realtime t;
     // Skip initial state
@@ -1407,10 +1408,6 @@ module lpc_periph_tb ();
             (LAD[0] === 1'bx || LAD[1] === 1'bx || LAD[2] === 1'bx || LAD[3] === 1'bx))
           $display("### Multiple LAD drivers (%b -> %b) @ %t", old_LAD, LAD, t);
       end
-      if (lpc_data_io[0] === 1'bx || lpc_data_io[1] === 1'bx || lpc_data_io[2] === 1'bx ||
-          lpc_data_io[3] === 1'bx || lpc_data_io[4] === 1'bx || lpc_data_io[5] === 1'bx ||
-          lpc_data_io[6] === 1'bx || lpc_data_io[7] === 1'bx)
-        $display("### Multiple lpc_data_io drivers (%b) @ %t", lpc_data_io, $realtime);
     end
   end
 
@@ -1446,7 +1443,8 @@ module lpc_periph_tb ();
       .lad_bus(LAD),
       .serirq(SERIRQ),
       // Data provider interface
-      .lpc_data_io(lpc_data_io),
+      .lpc_data_i(lpc_data_i),
+      .lpc_data_o(lpc_data_o),
       .lpc_addr_o(lpc_addr_o),
       .lpc_data_wr(lpc_data_wr),
       .lpc_wr_done(lpc_wr_done),
