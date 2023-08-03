@@ -11,7 +11,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: reviewdog/action-setup@v1
-    - uses: 3mdeb/verilog-cleaner@v2
+    - uses: 3mdeb/verilog-cleaner@v3
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         reporter: github-pr-review
