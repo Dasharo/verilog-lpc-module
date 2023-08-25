@@ -43,7 +43,8 @@ module lpc_periph (
     lpc_data_req,
     irq_num,
     interrupt,
-    global_reset
+    global_reset,
+    fsm_next_state_export
 );
   // verilog_format: off  // verible-verilog-format messes up comments alignment
   //# {{LPC interface}}
@@ -65,6 +66,8 @@ module lpc_periph (
   input  wire [ 3:0] irq_num;      // IRQ number, copy of TPM_INT_VECTOR_x.sirqVec
   input  wire        interrupt;    // Whether interrupt should be signaled to host, active high
   input  wire        global_reset; // Global reset coming Cortex-M4
+
+  output wire [ 4:0] fsm_next_state_export;
 
   // Internal signals
   reg [ 4:0] prev_state_o;         // Previous peripheral state (FSM)
@@ -360,4 +363,5 @@ module lpc_periph (
   assign lad_bus = driving_lad ? lad_r : 4'bzzzz;
 
   assign serirq = driving_serirq ? serirq_reg : 1'bz;
+  assign fsm_next_state_export = fsm_next_state;
 endmodule
