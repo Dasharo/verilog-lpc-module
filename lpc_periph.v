@@ -42,7 +42,8 @@ module lpc_periph (
     lpc_data_rd,
     lpc_data_req,
     irq_num,
-    interrupt
+    interrupt,
+    global_reset
 );
   // verilog_format: off  // verible-verilog-format messes up comments alignment
   //# {{LPC interface}}
@@ -63,27 +64,32 @@ module lpc_periph (
                                    // has been read (@negedge) from lpc_data_i
   input  wire [ 3:0] irq_num;      // IRQ number, copy of TPM_INT_VECTOR_x.sirqVec
   input  wire        interrupt;    // Whether interrupt should be signaled to host, active high
+  input  wire        global_reset; // Global reset coming Cortex-M4
 
   // Internal signals
   reg [ 4:0] prev_state_o;         // Previous peripheral state (FSM)
   reg [ 4:0] fsm_next_state;       // State: next state of FSM
-  reg [ 7:0] lpc_data_reg = 0;     // Copy of lpc_data_i data (data provider -> LPC)
-  reg        lpc_data_wr = 1'b0;
-  reg        waiting_on_write = 0; // Same as above, but driven on complementary edge
-  reg        lpc_data_req = 0;     // LPC interface is waiting for data sent from data provider
-  reg [ 3:0] irq_num_reg = 0;      // IRQ number, latched on SERIRQ start frame
-  reg        serirq_count_en = 0;  // Are we between SERIRQ start (exclusive) and stop (inclusive)?
-  reg        serirq_reg = 1;       // Value driven on SERIRQ, if enabled
-  reg        driving_serirq = 0;   // Enable signal for driving SERIRQ by LPC module
-  reg        serirq_mode = 0;      // SERIRQ mode: Continuous (0) or Quiet (1)
-  reg [ 3:0] lad_r = 0;
-  reg        driving_lad = 0;
+  reg [ 7:0] lpc_data_reg;         // Copy of lpc_data_i data (data provider -> LPC)
+  reg        lpc_data_wr;
+  reg        waiting_on_write;     // Same as above, but driven on complementary edge
+  reg        lpc_data_req;         // LPC interface is waiting for data sent from data provider
+  reg [ 3:0] irq_num_reg;          // IRQ number, latched on SERIRQ start frame
+  reg        serirq_count_en;      // Are we between SERIRQ start (exclusive) and stop (inclusive)?
+  reg        serirq_reg;           // Value driven on SERIRQ, if enabled
+  reg        driving_serirq;       // Enable signal for driving SERIRQ by LPC module
+  reg        serirq_mode;          // SERIRQ mode: Continuous (0) or Quiet (1)
+  reg [ 3:0] lad_r;
+  reg        driving_lad;
+  wire       any_reset;            // Combined LPC and global reset
 
   // verilog_format: on
 
-  always @(negedge nrst_i or posedge clk_i) begin : serirq_drive
+  assign any_reset = nrst_i & global_reset;
+
+  always @(negedge any_reset or posedge clk_i) begin : serirq_drive
     integer    serirq_counter;
-    if (~nrst_i) begin
+    if (~any_reset) begin
+      irq_num_reg    <= 0;
       serirq_counter <= 0;
       serirq_reg     <= 1;
       driving_serirq <= 0;
@@ -122,12 +128,12 @@ module lpc_periph (
     end
   end
 
-  always @(negedge nrst_i or negedge clk_i) begin : serirq_sample
+  always @(negedge any_reset or negedge clk_i) begin : serirq_sample
     // Start frame consists of 4 to 8 clocks of low SERIRQ, 5th bit is for catching transition. In
     // simulation this register may be shown in red, but it shouldn't contain any 'x' bits, only
     // '0', '1' and 'z' are valid. On hardware all 'z's will become '1's because of pull-up.
     reg [4:0] serirq_hist;
-    if (~nrst_i) begin
+    if (~any_reset) begin
       serirq_hist     <= 5'b11111;
       serirq_count_en <= 0;
       serirq_mode     <= `LPC_SERIRQ_CONT_MODE;
@@ -165,8 +171,10 @@ module lpc_periph (
     end
   end
 
-  always @(negedge nrst_i or negedge clk_i) begin
-    if (~nrst_i) begin
+  always @(negedge any_reset or negedge clk_i) begin
+    if (~any_reset) begin
+      lad_r <= 0;
+      lpc_data_reg <= 0;
       prev_state_o  <= `LPC_ST_IDLE;
       driving_lad   <= 1'b0;
       lpc_data_wr   <= 1'b0;
@@ -247,8 +255,8 @@ module lpc_periph (
     end
   end
 
-  always @(negedge nrst_i or posedge clk_i) begin
-    if (~nrst_i) begin
+  always @(negedge any_reset or posedge clk_i) begin
+    if (~any_reset) begin
       fsm_next_state    <= `LPC_ST_IDLE;
       waiting_on_write  <= 1'b0;
     end else begin
