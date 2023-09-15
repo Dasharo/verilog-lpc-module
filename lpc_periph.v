@@ -42,7 +42,8 @@ module lpc_periph (
     lpc_data_rd,
     lpc_data_req,
     irq_num,
-    interrupt
+    interrupt,
+    fsm_state_export
 );
   // verilog_format: off  // verible-verilog-format messes up comments alignment
   //# {{LPC interface}}
@@ -63,6 +64,7 @@ module lpc_periph (
                                    // has been read (@negedge) from lpc_data_i
   input  wire [ 3:0] irq_num;      // IRQ number, copy of TPM_INT_VECTOR_x.sirqVec
   input  wire        interrupt;    // Whether interrupt should be signaled to host, active high
+  output wire [ 4:0] fsm_state_export;
 
   // Internal signals
   reg [ 4:0] prev_state_o;         // Previous peripheral state (FSM)
@@ -81,7 +83,7 @@ module lpc_periph (
 
   // verilog_format: on
 
-  always @(negedge nrst_i or posedge clk_i) begin : serirq_drive
+  /*always @(negedge nrst_i or posedge clk_i) begin : serirq_drive
     integer    serirq_counter;
     if (~nrst_i) begin
       serirq_counter <= 0;
@@ -163,7 +165,7 @@ module lpc_periph (
         serirq_count_en <= 0;
       end
     end
-  end
+  end*/
 
   always @(negedge nrst_i or negedge clk_i) begin
     if (~nrst_i) begin
@@ -352,4 +354,5 @@ module lpc_periph (
   assign lad_bus = driving_lad ? lad_r : 4'bzzzz;
 
   assign serirq = driving_serirq ? serirq_reg : 1'bz;
+  assign fsm_state_export = prev_state_o;
 endmodule
