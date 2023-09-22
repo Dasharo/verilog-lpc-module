@@ -82,7 +82,7 @@ module lpc_periph (
   // verilog_format: on
 
   always @(negedge nrst_i or posedge clk_i) begin : serirq_drive
-    integer    serirq_counter;
+    reg [5:0] serirq_counter;
     if (~nrst_i) begin
       serirq_counter <= 0;
       serirq_reg     <= 1;
