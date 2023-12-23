@@ -340,8 +340,7 @@ module lpc_periph (
           waiting_on_write  <= 1'b0;
           fsm_next_state    <= `LPC_ST_IDLE;
         end
-        `LPC_ST_FINAL_TAR_CLK1: fsm_next_state <= `LPC_ST_IDLE;
-        default:                fsm_next_state <= `LPC_ST_IDLE;
+        default: fsm_next_state <= `LPC_ST_IDLE;
       endcase
     end
   end
