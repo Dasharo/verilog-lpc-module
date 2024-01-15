@@ -135,10 +135,10 @@ module lpc_periph_tb ();
 
   task lpc_addr (input [15:0] addr);
     begin
-      @(negedge LCLK) LAD_reg = addr[15:12];  // ADDR
-      @(negedge LCLK) LAD_reg = addr[11:8];
-      @(negedge LCLK) LAD_reg = addr[7:4];
-      @(negedge LCLK) LAD_reg = addr[3:0];
+      @(posedge LCLK) LAD_reg = addr[15:12];  // ADDR
+      @(posedge LCLK) LAD_reg = addr[11:8];
+      @(posedge LCLK) LAD_reg = addr[7:4];
+      @(posedge LCLK) LAD_reg = addr[3:0];
     end
   endtask
 
@@ -146,13 +146,11 @@ module lpc_periph_tb ();
     begin
       @(negedge LCLK) LAD_reg = 4'hF;         // TAR1
       @(negedge LCLK) drive_lad = 0;
-      @(posedge LCLK) if (LAD !== 4'hz)       // TAR2
+      @(negedge LCLK) if (LAD !== 4'hz)       // TAR2
         $display("### LAD driven on TAR2 @ %t", $realtime);
-      // Forked threads would hit previous posedge, skip it manually
-      @(negedge LCLK);
       fork : fs                               // SYNC
         begin
-          @(posedge LCLK) begin
+          @(negedge LCLK) begin
             if (LRESET && rsp_expected) begin
               if (LAD !== `LPC_SYNC_READY && LAD !== `LPC_SYNC_LWAIT)
                 $display("### Unexpected LAD on SYNC (%b) @ %t", LAD, $realtime);
@@ -165,7 +163,7 @@ module lpc_periph_tb ();
           end
         end
         begin
-          @(posedge LCLK && LAD === `LPC_SYNC_READY && LRESET && rsp_expected) disable fs;
+          @(negedge LCLK && LAD === `LPC_SYNC_READY && LRESET && rsp_expected) disable fs;
         end
       join
     end
@@ -173,7 +171,7 @@ module lpc_periph_tb ();
 
   task lpc_tar_p2h (input rsp_expected);
     begin
-      @(posedge LCLK)                         // TAR1
+      @(negedge LCLK)                         // TAR1
       if (LRESET == 0 && LAD !== 4'hz)
         $display("### LAD driven on TAR1 during reset (%b) @ %t", LAD, $realtime);
       else if (rsp_expected == 0 && LAD !== 4'hz)
@@ -182,7 +180,7 @@ module lpc_periph_tb ();
         $display("### LAD not driven on TAR1 @ %t", $realtime);
       else if (LRESET && rsp_expected && LAD !== 4'hF)
         $display("### Unexpected LAD on TAR1 (%b) @ %t", LAD, $realtime);
-      @(posedge LCLK)                         // TAR2
+      @(negedge LCLK)                         // TAR2
       if (LRESET == 1 && LAD !== 4'hz)
         $display("### LAD driven on TAR2 @ %t", $realtime);
       // Task should end on negedge, but because it also starts on negedge we end after posedge
@@ -192,7 +190,7 @@ module lpc_periph_tb ();
 
   task lpc_data_read (input rsp_expected, output [3:0] data);
     begin
-      @(posedge LCLK)                         // DATA
+      @(negedge LCLK)                         // DATA
       if ((LAD[0] === 1'bx || LAD[1] === 1'bx || LAD[2] === 1'bx || LAD[3] === 1'bx ||
            LAD[0] === 1'bz || LAD[1] === 1'bz || LAD[2] === 1'bz || LAD[3] === 1'bz) &&
           LRESET && rsp_expected)
@@ -208,20 +206,20 @@ module lpc_periph_tb ();
   task lpc_write (input [3:0] start, input [3:0] cycdir, input [15:0] addr, input [7:0] data);
     reg rsp_expected;
     begin
-      @(negedge LCLK);
+      @(posedge LCLK);
       drive_lad = 1;
       LFRAME = 0;
       LAD_reg = start;                          // START
-      @(posedge LCLK)
+      @(negedge LCLK)
         if ((LAD === `LPC_START) && (cycdir === `LPC_IO_WRITE))
           rsp_expected = 1;
         else
           rsp_expected = 0;
-      @(negedge LCLK) LFRAME = 1;
+      @(posedge LCLK) LFRAME = 1;
       LAD_reg = cycdir;                         // CYCTYPE + DIR
       lpc_addr (addr);                          // ADDR
-      @(negedge LCLK) LAD_reg = data[3:0];      // DATA
-      @(negedge LCLK) LAD_reg = data[7:4];
+      @(posedge LCLK) LAD_reg = data[3:0];      // DATA
+      @(posedge LCLK) LAD_reg = data[7:4];
       lpc_tar_h2p_sync (rsp_expected);          // TAR, SYNC
       lpc_tar_p2h (rsp_expected);               // TAR
     end
@@ -230,16 +228,16 @@ module lpc_periph_tb ();
   task lpc_read (input [3:0] start, input [3:0] cycdir, input [15:0] addr, output [7:0] data);
     reg rsp_expected;
     begin
-      @(negedge LCLK);
+      @(posedge LCLK);
       drive_lad = 1;
       LFRAME = 0;
       LAD_reg = start;                          // START
-      @(posedge LCLK)
+      @(negedge LCLK)
         if ((LAD === `LPC_START) && (cycdir === `LPC_IO_READ))
           rsp_expected = 1;
         else
           rsp_expected = 0;
-      @(negedge LCLK) LFRAME = 1;
+      @(posedge LCLK) LFRAME = 1;
       LAD_reg = cycdir;                         // CYCTYPE + DIR
       lpc_addr (addr);                          // ADDR
       lpc_tar_h2p_sync (rsp_expected);          // TAR, SYNC
@@ -300,7 +298,7 @@ module lpc_periph_tb ();
     int          = 0;
     #40 LRESET   = 0;
     #250 LRESET  = 1;
-    expect_reset = 0;
+    #40 expect_reset = 0;
 
     // Perform write
     $display("Performing TPM write w/o delay");
@@ -491,7 +489,7 @@ module lpc_periph_tb ();
     expected_data = 8'h81;
     #100 tpm_write (16'h3461, expected_data);
     if (periph_data != expected_data)
-      $display("### Write failed, expected %2h, got %2h", expected_data, periph_data);
+      $display("### Write failed, expected %2h, got %2h @ %t", expected_data, periph_data, $realtime);
 
     #40;
     // Extended LFRAME# write with delay
@@ -502,7 +500,7 @@ module lpc_periph_tb ();
     expected_data = 8'h79;
     #100 tpm_write (16'h4682, expected_data);
     if (periph_data != expected_data)
-      $display("### Write failed, expected %2h, got %2h", expected_data, periph_data);
+      $display("### Write failed, expected %2h, got %2h @ %t", expected_data, periph_data, $realtime);
 
     #40;
     delay = 0;
@@ -519,7 +517,7 @@ module lpc_periph_tb ();
     #15 LAD_reg = 4'h1;
     tpm_write (16'h3461, expected_data);
     if (periph_data != expected_data)
-      $display("### Write failed, expected %2h, got %2h", expected_data, periph_data);
+      $display("### Write failed, expected %2h, got %2h @ %t", expected_data, periph_data, $realtime);
 
     #40;
     LAD_reg = 4'h1;
@@ -531,7 +529,7 @@ module lpc_periph_tb ();
     #15 LAD_reg = 4'h7;
     tpm_write (16'h3461, expected_data);
     if (periph_data != expected_data)
-      $display("### Write failed, expected %2h, got %2h", expected_data, periph_data);
+      $display("### Write failed, expected %2h, got %2h @ %t", expected_data, periph_data, $realtime);
 
     #40;
     LAD_reg = 4'h1;
@@ -572,7 +570,7 @@ module lpc_periph_tb ();
     // Short but proper LPC_START
     fork
       begin
-        @(negedge LCLK);
+        @(posedge LCLK);
         #15 LAD_reg = `LPC_START;
         #10 LAD_reg = 4'h7;
       end
@@ -580,14 +578,14 @@ module lpc_periph_tb ();
         expected_data = 8'h17;
         lpc_write (4'hz, `LPC_IO_WRITE, 16'h7413, expected_data);
         if (periph_data != expected_data)
-          $display("### Write failed, expected %2h, got %2h", expected_data, periph_data);
+          $display("### Write failed, expected %2h, got %2h @ %t", expected_data, periph_data, $realtime);
       end
     join
 
     // Bad START surrounded by proper LPC_STARTs
     fork
       begin
-        @(negedge LCLK);
+        @(posedge LCLK);
         #1  LAD_reg = `LPC_START;
         #14 LAD_reg = 4'h3;
         #10 LAD_reg = `LPC_START;
