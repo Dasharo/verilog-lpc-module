@@ -186,12 +186,6 @@ module lpc_periph (
         end
         `LPC_ST_TAR_RD_CLK2: begin
           lad_r <= `LPC_SYNC_LWAIT;
-          // Avoid sync wait if it isn't required
-          if (lpc_data_rd == 1'b1) begin
-            lad_r <= `LPC_SYNC_READY;
-            lpc_data_reg  <= lpc_data_i;
-            lpc_data_req  <= 1'b0;
-          end
           driving_lad   <= 1'b1;
           prev_state_o  <= fsm_next_state;
         end
